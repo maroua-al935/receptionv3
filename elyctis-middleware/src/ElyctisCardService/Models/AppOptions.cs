@@ -7,8 +7,8 @@ namespace ElyctisCardService.Models
     {
         public AppOptions()
         {
-            ListenUrl = "http://127.0.0.1:8765/";
-            AllowedOrigin = "http://127.0.0.1:8000";
+            ListenUrl = "http://10.16.40.3:8765/";
+            AllowedOrigin = "http://127.0.0.1:8008";
             ApiToken = "change-this-local-token";
             ReaderNameContains = "";
             ReadTimeoutMs = 15000;
@@ -21,7 +21,7 @@ namespace ElyctisCardService.Models
             AutoReadMrzFromScanner = true;
             ScannerPortName = "COM6";
             ScannerMrzTimeoutMs = 5000;
-            ScannerAssemblyPath = @"C:\Users\ANAM1429\receptionv2\x86\Release\ELY TRAVEL DOC.exe";
+            ScannerAssemblyPath = @"C:\\Users\\ANAM1429\\Desktop\\Application - ELY TRAVEL DOC v4.9.3\\x64\\Release\\ELY TRAVEL DOC.exe";
         }
 
         public string ListenUrl { get; set; }

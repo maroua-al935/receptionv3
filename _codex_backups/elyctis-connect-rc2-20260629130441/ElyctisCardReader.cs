@@ -1,6 +1,5 @@
 using System;
 using System.Linq;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using ElyMRTDDotNet;
@@ -193,7 +192,7 @@ namespace ElyctisCardService.Services
                 {
                     var rc = mrtd.connect(reader);
                     _logger.Info("connect(" + reader + ") returned " + rc);
-                    if (rc == 0 || rc == 1 || rc == 2)
+                    if (rc == 0 || rc == 1)
                         return true;
                 }
                 catch (Exception ex)
@@ -337,67 +336,18 @@ namespace ElyctisCardService.Services
         {
             try
             {
-                var dg10 = TryReadDataGroup(() => mrtd.readDG10(), "DG10");
-                var nin = FirstValidNin(
-                    ExtractNin(SafeBytes(() => mrtd.getDG10())),
-                    SafeString(() => mrtd.getPersonalNumber()));
-                if (!string.IsNullOrWhiteSpace(nin))
-                    return nin;
-
                 var dg11 = TryReadDataGroup(() => mrtd.readDG11(), "DG11");
-                nin = FirstValidNin(
-                    SafeString(() => mrtd.getPersonalNumberDg11()),
-                    SafeString(() => mrtd.getPersonalNumber()));
-                if (dg10 < 0 && dg11 < 0 && string.IsNullOrWhiteSpace(nin))
+                if (dg11 < 0)
                     return null;
 
-                return nin;
+                var personalNumber = SafeString(() => mrtd.getPersonalNumberDg11());
+                return NormalizeNin(personalNumber);
             }
             catch (Exception ex)
             {
                 _logger.Warn("NIN read failed: " + ex.Message);
                 return null;
             }
-        }
-
-        private static string ExtractNin(byte[] value)
-        {
-            if (value == null || value.Length == 0)
-                return null;
-
-            return FirstValidNin(
-                Encoding.ASCII.GetString(value),
-                Encoding.UTF8.GetString(value),
-                Encoding.Unicode.GetString(value),
-                Encoding.BigEndianUnicode.GetString(value),
-                ExtractBcdNin(value));
-        }
-
-        private static string ExtractBcdNin(byte[] value)
-        {
-            var digits = new StringBuilder();
-            foreach (var b in value)
-            {
-                if (!AppendBcdDigit(digits, b >> 4) || !AppendBcdDigit(digits, b & 0xF))
-                {
-                    digits.Clear();
-                    continue;
-                }
-
-                if (digits.Length >= 18)
-                    return digits.ToString().Substring(0, 18);
-            }
-
-            return null;
-        }
-
-        private static bool AppendBcdDigit(StringBuilder digits, int value)
-        {
-            if (value < 0 || value > 9)
-                return false;
-
-            digits.Append((char)('0' + value));
-            return true;
         }
 
         private static string ExtractNin(string value)
@@ -420,29 +370,7 @@ namespace ElyctisCardService.Services
             if (string.IsNullOrWhiteSpace(value))
                 return null;
 
-            var trimmed = value.Trim();
-            if (string.Equals(trimmed, "NA", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(trimmed, "N/A", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(trimmed, "NULL", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(trimmed, "NONE", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(trimmed, "-", StringComparison.OrdinalIgnoreCase))
-            {
-                return null;
-            }
-
-            return ExtractNin(trimmed);
-        }
-
-        private static string FirstValidNin(params string[] values)
-        {
-            foreach (var value in values)
-            {
-                var nin = NormalizeNin(value);
-                if (!string.IsNullOrWhiteSpace(nin))
-                    return nin;
-            }
-
-            return null;
+            return ExtractNin(value) ?? value.Trim();
         }
 
         private int ResolvePasswordType(AccessPassword access)

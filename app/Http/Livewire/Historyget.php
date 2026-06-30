@@ -22,34 +22,37 @@ class Historyget extends Component
     public $searchhidden;
     public $datehidden;
     public $totalVisits = 0;
-public $todayVisits = 0;
-public $companiesCount = 0;
-public $activeVisitors = 0;
-   public function mount()
-{
-    $this->query = "";
-    $this->results = collect();
-    $this->cat = "1";
-    $this->status = "";
-    $this->date = "";
-    $this->noresults = 0;
-    $this->datehidden = 1;
-    $this->searchhidden = 0;
+    public $todayVisits = 0;
+    public $companiesCount = 0;
+    public $activeVisitors = 0;
 
-    $this->loadStats();
-}
-private function loadStats()
-{
-    $baseQuery = $this->applyVisibility(visits::query());
+    public function mount()
+    {
+        $this->query = "";
+        $this->results = collect();
+        $this->cat = "1";
+        $this->status = "";
+        $this->date = "";
+        $this->noresults = 0;
+        $this->datehidden = 1;
+        $this->searchhidden = 0;
 
-    $this->totalVisits = (clone $baseQuery)->count();
+        $this->loadStats();
+    }
 
-    $this->todayVisits = (clone $baseQuery)->whereDate('entry_date', now())->count();
+    private function loadStats()
+    {
+        $baseQuery = $this->applyVisibility(visits::query());
 
-    $this->companiesCount = (clone $baseQuery)->distinct('organization')->count('organization');
+        $this->totalVisits = (clone $baseQuery)->count();
 
-    $this->activeVisitors = (clone $baseQuery)->where('status', 'active')->count();
-}
+        $this->todayVisits = (clone $baseQuery)->whereDate('entry_date', now())->count();
+
+        $this->companiesCount = (clone $baseQuery)->distinct('organization')->count('organization');
+
+        $this->activeVisitors = (clone $baseQuery)->where('status', 'active')->count();
+    }
+
     public function resetdata()
     {
         $this->query="";
@@ -86,12 +89,15 @@ private function loadStats()
             $this->searchbydate($this->date);
         } elseif ($this->cat == "4") {
             $this->searchbypermet($this->query);
+        } elseif ($this->cat == "5") {
+            $this->searchbybadge($this->query);
         }
     }
+
     public function searchbyname($query)
     {
         if (!empty($this->query) && strlen($this->query) >2) {
-            $this->results=$this->applyVisibility(visits::selectraw("visits.id,visits.is_deleted,organisations.name as org_name,visitors.firstname,status,visitors.lastname,entry_date,users.name as emp_visited,groups.group_name as service_name,visits.subject as subject")
+            $this->results=$this->applyVisibility(visits::selectraw("visits.id,visits.is_deleted,visits.badge_n,organisations.name as org_name,visitors.firstname,status,visitors.lastname,entry_date,users.name as emp_visited,groups.group_name as service_name,visits.subject as subject")
                 ->leftjoin('visitors', 'visitors.id', '=', 'visits.visitor')
                 ->leftjoin('organisations', 'organisations.id', '=', 'visits.organization')
                 ->leftjoin('groups', 'groups.id', '=', 'visits.service_emp_visited')
@@ -110,6 +116,7 @@ private function loadStats()
         $this->results = collect();
 
     }
+
     public function exportExcel()
     {
         $rows = $this->exportRows();
@@ -118,11 +125,12 @@ private function loadStats()
         return response()->streamDownload(function () use ($rows) {
             $handle = fopen('php://output', 'w');
             fwrite($handle, "\xEF\xBB\xBF");
-            fputcsv($handle, ['Visiteur', 'Société', 'Hôte', 'Service', 'Date entrée', 'Statut']);
+            fputcsv($handle, ['Visiteur', 'Numero badge', 'Societe', 'Hote', 'Service', 'Date entree', 'Statut']);
 
             foreach ($rows as $row) {
                 fputcsv($handle, [
                     trim(($row->firstname ?? '') . ' ' . ($row->lastname ?? '')),
+                    $row->badge_n ?? '',
                     $row->org_name ?? '',
                     $row->emp_visited ?? '',
                     $row->service_name ?? $row->ant_name ?? '',
@@ -152,11 +160,10 @@ private function loadStats()
         ]);
     }
 
-
     public function searchbycompany($query)
     {
         if (!empty($this->query) && strlen($this->query) >2) {
-            $this->results=$this->applyVisibility(visits::selectraw("visits.id,visits.is_deleted,organisations.name as org_name,visitors.firstname,status,visitors.lastname,entry_date,users.name as emp_visited,groups.group_name as service_name,visits.subject as subject")
+            $this->results=$this->applyVisibility(visits::selectraw("visits.id,visits.is_deleted,visits.badge_n,organisations.name as org_name,visitors.firstname,status,visitors.lastname,entry_date,users.name as emp_visited,groups.group_name as service_name,visits.subject as subject")
               ->leftjoin('visitors', 'visitors.id', '=', 'visits.visitor')
               ->leftjoin('organisations', 'organisations.id', '=', 'visits.organization')
               ->leftjoin('groups', 'groups.id', '=', 'visits.service_emp_visited')
@@ -175,11 +182,10 @@ private function loadStats()
         return $this->results="";
     }
 
-
     public function searchbypermet($query)
     {
         if (!empty($this->query) && strlen($this->query) >2) {
-            $this->results=$this->applyVisibility(visits_permets::selectraw("visits.id,visits.is_deleted,organisations.name as org_name,visitors.firstname,status,visitors.lastname,entry_date,users.name as emp_visited,groups.group_name as service_name,visits.subject as subject")
+            $this->results=$this->applyVisibility(visits_permets::selectraw("visits.id,visits.is_deleted,visits.badge_n,organisations.name as org_name,visitors.firstname,status,visitors.lastname,entry_date,users.name as emp_visited,groups.group_name as service_name,visits.subject as subject")
                ->leftjoin('visits', 'visits_permets.visit', '=', 'visits.id')
                ->leftjoin('visitors', 'visitors.id', '=', 'visits.visitor')
                ->leftjoin('organisations', 'organisations.id', '=', 'visits.organization')
@@ -200,19 +206,41 @@ private function loadStats()
         return $this->results="";
     }
 
+    public function searchbybadge($query)
+    {
+        if (!empty($this->query) && strlen($this->query) >2) {
+            $this->results=$this->applyVisibility(visits::selectraw("visits.id,visits.is_deleted,visits.badge_n,organisations.name as org_name,visitors.firstname,status,visitors.lastname,entry_date,users.name as emp_visited,groups.group_name as service_name,visits.subject as subject")
+                ->leftjoin('visitors', 'visitors.id', '=', 'visits.visitor')
+                ->leftjoin('organisations', 'organisations.id', '=', 'visits.organization')
+                ->leftjoin('groups', 'groups.id', '=', 'visits.service_emp_visited')
+                ->leftjoin('users', 'users.id', '=', 'visits.emp_visited')
+                ->whereraw("visits.badge_n like '%".e($query)."%'"))
+                ->when($this->status !== '', function ($builder) {
+                    $builder->where('status', $this->status);
+                })
+                ->get();
+            if ($this->results->count() >0) {
+                return $this->results;
+            } else {
+                return $this->noresults=1;
+            }
+        }
+        return $this->results="";
+    }
+
     public function searchbydate($query)
     {
         if(!empty($query)) {
-             $this->results=$this->applyVisibility(visits::selectraw("visits.id,visits.is_deleted,organisations.name as org_name,visitors.firstname,status,visitors.lastname,entry_date,users.name as emp_visited,groups.group_name as service_name,visits.subject as subject")
-              ->leftjoin('visitors', 'visitors.id', '=', 'visits.visitor')
-              ->leftjoin('organisations', 'organisations.id', '=', 'visits.organization')
-              ->leftjoin('groups', 'groups.id', '=', 'visits.service_emp_visited')
-              ->leftjoin('users', 'users.id', '=', 'visits.emp_visited')
-              ->wheredate('entry_date', $query))
-              ->when($this->status !== '', function ($builder) {
+             $this->results=$this->applyVisibility(visits::selectraw("visits.id,visits.is_deleted,visits.badge_n,organisations.name as org_name,visitors.firstname,status,visitors.lastname,entry_date,users.name as emp_visited,groups.group_name as service_name,visits.subject as subject")
+               ->leftjoin('visitors', 'visitors.id', '=', 'visits.visitor')
+               ->leftjoin('organisations', 'organisations.id', '=', 'visits.organization')
+               ->leftjoin('groups', 'groups.id', '=', 'visits.service_emp_visited')
+               ->leftjoin('users', 'users.id', '=', 'visits.emp_visited')
+               ->wheredate('entry_date', $query))
+               ->when($this->status !== '', function ($builder) {
                     $builder->where('status', $this->status);
                 })
-              ->get();
+               ->get();
             if ($this->results->count() >0) {
                 return $this->results;
             } else {
@@ -269,7 +297,7 @@ private function loadStats()
 
     private function exportRows(): Collection
     {
-        $query = visits::selectRaw("visits.id,visits.is_deleted,organisations.name as org_name,visitors.firstname,visitors.lastname,status,entry_date,users.name as emp_visited,groups.group_name as service_name,visits.subject as subject")
+        $query = visits::selectRaw("visits.id,visits.is_deleted,visits.badge_n,organisations.name as org_name,visitors.firstname,visitors.lastname,status,entry_date,users.name as emp_visited,groups.group_name as service_name,visits.subject as subject")
             ->leftJoin('visitors', 'visitors.id', '=', 'visits.visitor')
             ->leftJoin('organisations', 'organisations.id', '=', 'visits.organization')
             ->leftJoin('groups', 'groups.id', '=', 'visits.service_emp_visited')
@@ -283,6 +311,11 @@ private function loadStats()
 
     private function applyFilters($query)
     {
+        if ($this->cat === '5' && !empty($this->query) && strlen($this->query) > 2) {
+            $query->whereRaw("visits.badge_n like '%" . e($this->query) . "%'");
+            return $query;
+        }
+
         if ($this->status !== '') {
             $query->where('status', $this->status);
         }
@@ -304,7 +337,7 @@ private function loadStats()
             return $query;
         }
 
-        if (!empty($this->query) && strlen($this->query) > 2) {
+        if (!empty($this->query) && strlen($this->query) > 2 && $this->cat !== '5') {
             $query->whereRaw("concat(visitors.firstname,' ',visitors.lastname) like '%" . e($this->query) . "%'");
         }
 
@@ -316,8 +349,9 @@ private function loadStats()
         return match ((string) $status) {
             '0' => 'En attente',
             '1' => 'En cours',
-            '2' => 'Terminée',
+            '2' => 'Terminee',
             default => 'Inconnu',
         };
     }
 }
+

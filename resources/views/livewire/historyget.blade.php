@@ -66,7 +66,7 @@
             <div>
                 <p class="visitx-eyebrow">Recherche historique</p>
                 <h2 class="text-xl font-semibold text-slate-900">Filtres de consultation</h2>
-                <p class="mt-1 text-sm text-slate-500">Recherchez par nom, societe, permis minier ou date.</p>
+                <p class="mt-1 text-sm text-slate-500">Recherchez par nom, societe, permis minier, numero de badge ou date.</p>
             </div>
 
             <div class="flex flex-wrap gap-3">
@@ -83,9 +83,10 @@
             <div>
                 <label class="mb-2 block text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Recherche par</label>
                 <select wire:model="cat" class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-violet-300 focus:bg-white focus:ring-4 focus:ring-violet-100">
-                    <option value="1">Nom et Prénom</option>
+                    <option value="1">Nom et Prenom</option>
                     <option value="2">Societe</option>
                     <option value="4">Permis minier</option>
+                    <option value="5">Numero badge</option>
                     <option value="3">Date</option>
                 </select>
             </div>
@@ -127,6 +128,7 @@
                 <table class="modern-table" aria-label="Liste des visites">
                     <thead>
                         <tr>
+                            <th class="w-44">Numero badge</th>
                             <th>Visiteur</th>
                             <th>Hote</th>
                             <th>Date d'entree</th>
@@ -137,6 +139,9 @@
                     <tbody>
                         @foreach($results as $row)
                             <tr>
+                                <td class="px-5 py-4">
+                                    <div class="text-base md:text-lg font-black tracking-wide text-slate-900">{{ $row->badge_n ?: '-' }}</div>
+                                </td>
                                 <td class="px-5 py-4">
                                     <div class="flex items-center gap-3">
                                         <div class="flex h-10 w-10 items-center justify-center rounded-full bg-violet-100 text-sm font-bold text-violet-700">
@@ -188,3 +193,4 @@
         </section>
     @endif
 </div>
+

@@ -155,7 +155,7 @@
         }).trigger('change');
 $(document).ready(function () {
         const elyctisConfig = {
-            url: 'http://127.0.0.1:8765/read-card',
+            url: 'http://10.16.40.3:8765/read-card',
             token: 'change-this-local-token',
             intervalMs: 2500
         };
@@ -302,11 +302,10 @@ $(document).ready(function () {
             $('#elyctis-read-btn').prop('disabled', true).addClass('opacity-60');
             setElyctisStatus('Lecture en cours...', 'text-gray-500');
             try {
-                const separator = elyctisConfig.url.indexOf('?') === -1 ? '?' : '&';
-                const readUrl = elyctisConfig.url + separator + 'token=' + encodeURIComponent(elyctisConfig.token);
-                const response = await fetch(readUrl, {
+                const response = await fetch(elyctisConfig.url, {
                     method: 'GET',
                     headers: {
+                        'X-Elyctis-Token': elyctisConfig.token,
                         'Accept': 'application/json'
                     },
                     cache: 'no-store'
