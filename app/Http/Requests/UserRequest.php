@@ -29,13 +29,13 @@ class UserRequest extends FormRequest
 
         return [
             'username' => [
-                'required',
+                'nullable',
                 'string',
                 'max:255',
                 Rule::unique('users', 'username')->ignore($userId),
             ],
             'email' => [
-                'required',
+                'nullable',
                 'email',
                 Rule::unique('users')->ignore($userId),
             ],

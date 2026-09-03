@@ -11,28 +11,22 @@ class HistoryController extends Controller
 {
     public function get_index()
     {
-        switch(Auth::guard('web')->user()->profile)
+        $profile = (int) Auth::guard('web')->user()->profile;
+
+        if (!in_array($profile, [1, 2, 3], true)) {
+            abort(403, 'Acces history reserve aux profils Admin, President et Superviseur.');
+        }
+
+        switch($profile)
         {
-           case 6:
-            return $this->index_6();
-            break;
-           case 7:
-            return $this->index_6();
-            break;
-           case 5:
-            return $this->index_5();
-            break;
-           case 8:
-            return $this->index_5();
+           case 1:
+            return $this->index_2();
             break;
             case 2:
             return $this->index_2();
             break;
-           case 4:
-            return $this->index_4();
-            break;
-           case 9:
-            return $this->index_4();
+           case 3:
+            return $this->index_2();
             break;
         }
     }
@@ -67,6 +61,16 @@ class HistoryController extends Controller
         return $user && (
             $user->name === 'agent_accueil_service'
             || $user->email === 'agent.accueil.service@visilog.local'
+        );
+    }
+
+    private function isFiscalAssignmentAgent(): bool
+    {
+        $user = Auth::guard('web')->user();
+
+        return $user && (
+            $user->name === 'agent_fiscal'
+            || $user->email === 'agent_fiscal@visilog.local'
         );
     }
 

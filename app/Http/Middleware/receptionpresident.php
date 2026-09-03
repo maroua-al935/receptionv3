@@ -21,7 +21,7 @@ class receptionpresident
         return redirect()->route('l_index');
     }
 
-    if (in_array((int) Auth::user()->profile, [2,4,5,8], true)) {
+    if (in_array((int) Auth::user()->profile, [1, 2, 3, 4, 5, 8, 9, 10], true)) {
         return $next($request);
     }
 

@@ -62,7 +62,7 @@
                                     </td>
                                     <td class="px-5 py-4 text-right">
                                         <a class="inline-flex rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700" href="{{ route('i_info', $row->id) }}">
-                                            Voir
+                                            Details complets
                                         </a>
                                     </td>
                                 </tr>

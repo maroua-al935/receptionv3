@@ -168,7 +168,7 @@
                                 </td>
                                 <td class="px-5 py-4">
                                     <div class="flex justify-end">
-                                        <a href="{{ route('i_ant_p_info', $row->id) }}" class="rounded-xl border border-slate-200 p-2 text-slate-600 transition hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700" title="Voir">
+                                        <a href="{{ route('i_ant_p_info', $row->id) }}" class="rounded-xl border border-slate-200 p-2 text-slate-600 transition hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700" title="Details complets">
                                             <svg class="h-4 w-4" viewBox="0 0 24 24"><path fill="currentColor" d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5m0 12.5a5 5 0 1 1 0-10a5 5 0 0 1 0 10m0-8a3 3 0 1 0 0 6a3 3 0 0 0 0-6"/></svg>
                                         </a>
                                     </div>

@@ -1,6 +1,9 @@
 @extends('Reception.layouts.master')
 
 @section('body')
+    @php
+        $isBadgeAgent = Auth::guard('web')->user()->name === 'agent_saisie_badge' || Auth::guard('web')->user()->email === 'agent_saisie_badge@visilog.local';
+    @endphp
     <div class="space-y-6">
         <div class="visitx-hero">
             <div>
@@ -51,9 +54,7 @@
                                 @php $i--; @endphp
                                 <tr>
                                     <td class="px-5 py-4 text-sm font-medium text-slate-700">{{ $i }}</td>
-                                    <td class="px-5 py-4">
-                                        <span class="rounded-lg bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700">{{ $row->badge_n ?: '-' }}</span>
-                                    </td>
+                                    <td class="px-5 py-4 visitx-badge-col"><span class="visitx-badge-pill visitx-badge-pill-soft">{{ $row->badge_n ?: '-' }}</span></td>
                                     <td class="px-5 py-4">
                                         <div class="flex items-center gap-3">
                                             <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-sky-50 text-sky-700">
@@ -80,10 +81,14 @@
                                     </td>
                                     <td class="px-5 py-4">
                                         <div class="flex justify-end gap-2">
-                                            <a class="rounded-lg border border-slate-200 p-2 text-slate-600 transition hover:border-sky-200 hover:bg-sky-50 hover:text-sky-700" href="{{ route('i_info',$row->id) }}" title="Voir">
+                                            <a class="rounded-lg border border-slate-200 p-2 text-slate-600 transition hover:border-sky-200 hover:bg-sky-50 hover:text-sky-700" href="{{ route('i_info',$row->id) }}" title="Details complets">
                                                 <svg class="h-4 w-4" viewBox="0 0 24 24"><path fill="currentColor" d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5m0 12.5a5 5 0 1 1 0-10a5 5 0 0 1 0 10m0-8a3 3 0 1 0 0 6a3 3 0 0 0 0-6"/></svg>
                                             </a>
-                                            @if((int) Auth::guard('web')->user()->profile !== 8 || !in_array((int) $row->status, [2, 3], true))
+                                            @if($isBadgeAgent)
+                                                <a class="rounded-lg border border-slate-200 p-2 text-slate-600 transition hover:border-sky-200 hover:bg-sky-50 hover:text-sky-700" href="{{ route('i_edit_visitors',$row->id) }}" title="Badge">
+                                                    <svg class="h-4 w-4" viewBox="0 0 24 24"><path fill="currentColor" d="m19.3 8.925l-4.25-4.2l1.4-1.4q.575-.575 1.413-.575t1.412.575l1.4 1.4q.575.575.6 1.388t-.55 1.387zM17.85 10.4L7.25 21H3v-4.25l10.6-10.6z"/></svg>
+                                                </a>
+                                            @elseif((int) Auth::guard('web')->user()->profile !== 8 || !in_array((int) $row->status, [2, 3], true))
                                                 <a class="rounded-lg border border-slate-200 p-2 text-slate-600 transition hover:border-sky-200 hover:bg-sky-50 hover:text-sky-700" href="{{ route('i_edit_visitors',$row->id) }}" title="{{ (int) Auth::guard('web')->user()->profile === 8 ? 'Orienter' : 'Modifier' }}">
                                                     <svg class="h-4 w-4" viewBox="0 0 24 24"><path fill="currentColor" d="m19.3 8.925l-4.25-4.2l1.4-1.4q.575-.575 1.413-.575t1.412.575l1.4 1.4q.575.575.6 1.388t-.55 1.387zM17.85 10.4L7.25 21H3v-4.25l10.6-10.6z"/></svg>
                                                 </a>
@@ -141,7 +146,7 @@
                                 @php $i--; @endphp
                                 <tr>
                                     <td class="px-5 py-4 text-sm font-medium text-slate-700">{{ $i }}</td>
-                                    <td class="px-5 py-4"><span class="rounded-lg bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700">{{ $row->badge_n ?: '-' }}</span></td>
+                                    <td class="px-5 py-4 visitx-badge-col"><span class="visitx-badge-pill visitx-badge-pill-soft">{{ $row->badge_n ?: '-' }}</span></td>
                                     <td class="px-5 py-4"><div class="font-medium text-slate-900">{{ $row->firstname }} {{ $row->lastname }}</div><div class="text-sm text-slate-500">{{ $row->org_name }}</div></td>
                                     <td class="px-5 py-4"><div class="text-sm font-medium text-slate-900">{{ $row->emp_visited }}</div><div class="text-sm text-slate-500">{{ $row->service_name }}</div></td>
                                     <td class="px-5 py-4 text-sm text-slate-500">{{ $row->entry_date }}</td>
@@ -155,10 +160,14 @@
                                     </td>
                                     <td class="px-5 py-4">
                                         <div class="flex justify-end gap-2">
-                                            <a class="rounded-lg border border-slate-200 p-2 text-slate-600 transition hover:border-sky-200 hover:bg-sky-50 hover:text-sky-700" href="{{ route('i_info',$row->id) }}" title="Voir">
+                                            <a class="rounded-lg border border-slate-200 p-2 text-slate-600 transition hover:border-sky-200 hover:bg-sky-50 hover:text-sky-700" href="{{ route('i_info',$row->id) }}" title="Details complets">
                                                 <svg class="h-4 w-4" viewBox="0 0 24 24"><path fill="currentColor" d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5m0 12.5a5 5 0 1 1 0-10a5 5 0 0 1 0 10m0-8a3 3 0 1 0 0 6a3 3 0 0 0 0-6"/></svg>
                                             </a>
-                                            @if((int) Auth::guard('web')->user()->profile !== 8 || !in_array((int) $row->status, [2, 3], true))
+                                            @if($isBadgeAgent)
+                                                <a class="rounded-lg border border-slate-200 p-2 text-slate-600 transition hover:border-sky-200 hover:bg-sky-50 hover:text-sky-700" href="{{ route('i_edit_visitors',$row->id) }}" title="Badge">
+                                                    <svg class="h-4 w-4" viewBox="0 0 24 24"><path fill="currentColor" d="m19.3 8.925l-4.25-4.2l1.4-1.4q.575-.575 1.413-.575t1.412.575l1.4 1.4q.575.575.6 1.388t-.55 1.387zM17.85 10.4L7.25 21H3v-4.25l10.6-10.6z"/></svg>
+                                                </a>
+                                            @elseif((int) Auth::guard('web')->user()->profile !== 8 || !in_array((int) $row->status, [2, 3], true))
                                                 <a class="rounded-lg border border-slate-200 p-2 text-slate-600 transition hover:border-sky-200 hover:bg-sky-50 hover:text-sky-700" href="{{ route('i_edit_visitors',$row->id) }}" title="{{ (int) Auth::guard('web')->user()->profile === 8 ? 'Orienter' : 'Modifier' }}">
                                                     <svg class="h-4 w-4" viewBox="0 0 24 24"><path fill="currentColor" d="m19.3 8.925l-4.25-4.2l1.4-1.4q.575-.575 1.413-.575t1.412.575l1.4 1.4q.575.575.6 1.388t-.55 1.387zM17.85 10.4L7.25 21H3v-4.25l10.6-10.6z"/></svg>
                                                 </a>
@@ -179,3 +188,4 @@
         </section>
     </div>
 @endsection
+

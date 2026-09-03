@@ -22,14 +22,26 @@
 
         <section class="panel panel-pad">
             <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                <form action="{{ route('users.index') }}" method="GET" class="flex w-full max-w-xl flex-col gap-3 sm:flex-row">
+                <form action="{{ route('users.index') }}" method="GET" class="flex w-full flex-col gap-3">
                     <div class="visitx-search flex w-full xl:flex">
                         <svg class="h-4 w-4" viewBox="0 0 24 24"><path fill="currentColor" d="M9.5 3a6.5 6.5 0 0 1 5.176 10.435l4.445 4.444l-1.414 1.414l-4.444-4.445A6.5 6.5 0 1 1 9.5 3m0 2a4.5 4.5 0 1 0 0 9a4.5 4.5 0 0 0 0-9"/></svg>
                         <input placeholder="Rechercher un utilisateur..." name="search" value="{{ request('search') }}" />
                     </div>
-                    <button type="submit" class="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-600 transition hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700">
-                        Rechercher
-                    </button>
+                    <div class="flex flex-col gap-3 lg:flex-row">
+                        <select name="head_status" class="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
+                            <option value="">Tous les utilisateurs</option>
+                            <option value="yes" @selected(request('head_status') === 'yes')>Chefs uniquement</option>
+                            <option value="no" @selected(request('head_status') === 'no')>Non-chefs uniquement</option>
+                        </select>
+                        <select name="head_type" class="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
+                            <option value="">Chef de quoi ?</option>
+                            <option value="service" @selected(request('head_type') === 'service')>Chef de service</option>
+                            <option value="antenne" @selected(request('head_type') === 'antenne')>Chef d'antenne</option>
+                        </select>
+                        <button type="submit" class="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-600 transition hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700">
+                            Filtrer
+                        </button>
+                    </div>
                 </form>
 
                 <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
@@ -56,6 +68,7 @@
                             <th>Profil</th>
                             <th>Services</th>
                             <th>Antennes</th>
+                            <th>Chef de quoi</th>
                             <th class="text-right">Actions</th>
                         </tr>
                     </thead>
@@ -82,6 +95,7 @@
                                 </td>
                                 <td class="px-5 py-4 text-sm text-slate-500">{{ $user->service_labels ?: 'N/A' }}</td>
                                 <td class="px-5 py-4 text-sm text-slate-500">{{ $user->antenne_labels ?: 'N/A' }}</td>
+                                <td class="px-5 py-4 text-sm text-slate-500">{{ $user->head_labels ?: 'Non' }}</td>
                                 <td class="px-5 py-4">
                                     <div class="flex justify-end gap-2">
                                         <a href="{{ route('users.edit', $user->id) }}" class="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700">

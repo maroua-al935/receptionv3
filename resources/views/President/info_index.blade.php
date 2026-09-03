@@ -6,5 +6,6 @@
         'title' => $data[0]->firstname . ' ' . $data[0]->lastname,
         'subtitle' => 'Details du visiteur et informations de passage.',
         'backUrl' => route('i_visitors'),
+        'isAntenne' => false,
     ])
 @endsection

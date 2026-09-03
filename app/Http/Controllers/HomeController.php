@@ -30,6 +30,7 @@ class HomeController extends Controller
                 return $this->index_8();
                 break;
                 case 4:
+                case 10:
                 return $this->index_4();
                 break;
                 case 3:
@@ -158,138 +159,221 @@ class HomeController extends Controller
                    
     public function index_5() 
     {
-        $today=visit::wheredate('entry_date',db::raw('CURDATE()'))
-            ->where('is_deleted','=',0)->count();
-        $waiting=visit::wheredate('entry_date',db::raw('CURDATE()'))
-            ->where('status','=',0)
-            ->where('is_deleted','=',0)->count();
-        $progress=visit::wheredate('entry_date',db::raw('CURDATE()'))
-            ->where('status','=',1)
-            ->where('is_deleted','=',0)->count();
-        $finished=visit::wheredate('entry_date',db::raw('CURDATE()'))
-            ->where('status','=',2)
-            ->where('is_deleted','=',0)->count();
-        $visits=db::table('visits')->selectRaw('visits.id,badge_n,visits.is_deleted,organisations.name as org_name,visitors.firstname,status,visitors.lastname,entry_date,users.name as emp_visited,groups.group_name as service_name,visits.subject as subject')
-        ->leftjoin('visitors','visitors.id','=','visits.visitor')
-        ->leftjoin('organisations','organisations.id','=','visits.organization')
-        ->leftjoin('groups','groups.id','=','visits.service_emp_visited')
-        ->leftjoin('users','users.id','=','visits.emp_visited')
-        ->wheredate('entry_date',db::raw('CURDATE()'))
-        ->whereIn('status',[0,1,3])
-        ->where('visits.is_deleted','=',0)
-        ->orderByDesc('entry_date')->get();
+        $dashboard = $this->receptionDashboardData(false, false);
         return view('Reception.home')
             ->with('url','home')
-            ->with('today',$today)
-            ->with('progress',$progress)
-            ->with('waiting',$waiting)
-            ->with('finished',$finished)
-            ->with('data',$visits);
+            ->with($dashboard);
     }
 
     public function index_8()
     {
-        $today=visit::wheredate('entry_date',db::raw('CURDATE()'))
-            ->where('is_deleted','=',0)->count();
-        $waiting=visit::wheredate('entry_date',db::raw('CURDATE()'))
-            ->where('status','=',0)
-            ->whereNull('service_emp_visited')
-            ->where('is_deleted','=',0)->count();
-        $progress=visit::wheredate('entry_date',db::raw('CURDATE()'))
-            ->where('status','=',0)
-            ->whereNotNull('service_emp_visited')
-            ->whereNull('emp_visited')
-            ->where('is_deleted','=',0)->count();
-        $finished=visit::wheredate('entry_date',db::raw('CURDATE()'))
-            ->where('status','=',2)
-            ->where('is_deleted','=',0)->count();
-        $visits=db::table('visits')->selectRaw('visits.id,badge_n,visits.is_deleted,organisations.name as org_name,visitors.firstname,status,visitors.lastname,entry_date,users.name as emp_visited,groups.group_name as service_name,visits.subject as subject')
-        ->leftjoin('visitors','visitors.id','=','visits.visitor')
-        ->leftjoin('organisations','organisations.id','=','visits.organization')
-        ->leftjoin('groups','groups.id','=','visits.service_emp_visited')
-        ->leftjoin('users','users.id','=','visits.emp_visited')
-        ->wheredate('entry_date',db::raw('CURDATE()'))
-        ->whereIn('status',[0,1,3])
-        ->where('visits.is_deleted','=',0)
-        ->orderBy('entry_date','asc')->get();
-        return view('Reception.home')
+        $dashboard = $this->receptionDashboardData(true, true, true);
+        return view('Reception.orientation_home')
             ->with('url','home')
-            ->with('today',$today)
-            ->with('progress',$progress)
-            ->with('waiting',$waiting)
-            ->with('finished',$finished)
-            ->with('data',$visits);
+            ->with($dashboard);
+    }
+
+    public function reception_live_dashboard()
+    {
+        $profile = (int) Auth::guard('web')->user()->profile;
+        if (!in_array($profile, [1, 5, 8], true)) {
+            abort(403);
+        }
+
+        $dashboard = $this->receptionDashboardData($profile === 8, $profile === 8, $profile === 8);
+
+        return response()->json([
+            'html' => view('Reception.partials.home_live', $dashboard)->render(),
+            'updatedAt' => now()->toDateTimeString(),
+        ]);
+    }
+
+    private function receptionDashboardData(bool $serviceQueueCounts = false, bool $oldestFirst = false, bool $classicOnly = false): array
+    {
+        $search = trim((string) request('search', ''));
+        $statusFilter = (string) request()->query('status', 'all');
+        if (!in_array($statusFilter, ['all', '0', '1', '2', '3'], true)) {
+            $statusFilter = 'all';
+        }
+
+        $today = visit::wheredate('entry_date', DB::raw('CURDATE()'))
+            ->when($classicOnly, function ($query) {
+                $this->applyClassicWorkflowFilter($query);
+            })
+            ->where('is_deleted', '=', 0)
+            ->count();
+
+        if ($serviceQueueCounts) {
+            $waiting = visit::wheredate('entry_date', DB::raw('CURDATE()'))
+                ->when($classicOnly, function ($query) {
+                    $this->applyClassicWorkflowFilter($query);
+                })
+                ->where('status', '=', 0)
+                ->whereNull('service_emp_visited')
+                ->where('is_deleted', '=', 0)
+                ->count();
+            $progress = visit::wheredate('entry_date', DB::raw('CURDATE()'))
+                ->when($classicOnly, function ($query) {
+                    $this->applyClassicWorkflowFilter($query);
+                })
+                ->where('status', '=', 0)
+                ->whereNotNull('service_emp_visited')
+                ->whereNull('emp_visited')
+                ->where('is_deleted', '=', 0)
+                ->count();
+        } else {
+            $waiting = visit::wheredate('entry_date', DB::raw('CURDATE()'))
+                ->when($classicOnly, function ($query) {
+                    $this->applyClassicWorkflowFilter($query);
+                })
+                ->where('status', '=', 0)
+                ->where('is_deleted', '=', 0)
+                ->count();
+            $progress = visit::wheredate('entry_date', DB::raw('CURDATE()'))
+                ->when($classicOnly, function ($query) {
+                    $this->applyClassicWorkflowFilter($query);
+                })
+                ->where('status', '=', 1)
+                ->where('is_deleted', '=', 0)
+                ->count();
+        }
+
+        $finished = visit::wheredate('entry_date', DB::raw('CURDATE()'))
+            ->when($classicOnly, function ($query) {
+                $this->applyClassicWorkflowFilter($query);
+            })
+            ->where('status', '=', 2)
+            ->where('is_deleted', '=', 0)
+            ->count();
+
+        $visitsQuery = DB::table('visits')
+            ->selectRaw("visits.id,badge_n,visits.workflow_type,visits.is_deleted,organisations.name as org_name,visitors.firstname,status,visitors.lastname,entry_date,CASE WHEN visits.workflow_type = 'bog' THEN 'BOG' ELSE users.name END as emp_visited,groups.group_name as service_name,visits.subject as subject")
+            ->leftjoin('visitors', 'visitors.id', '=', 'visits.visitor')
+            ->leftjoin('organisations', 'organisations.id', '=', 'visits.organization')
+            ->leftjoin('groups', 'groups.id', '=', 'visits.service_emp_visited')
+            ->leftjoin('users', 'users.id', '=', 'visits.emp_visited')
+            ->wheredate('entry_date', DB::raw('CURDATE()'))
+            ->where('visits.is_deleted', '=', 0)
+            ->when($classicOnly, function ($query) {
+                $this->applyClassicWorkflowFilter($query, 'visits.workflow_type');
+            })
+            ->when($search !== '', function ($query) use ($search) {
+                $this->applyVisitSearchFilter($query, $search, true);
+            })
+            ->when($statusFilter !== 'all', function ($query) use ($statusFilter) {
+                $query->where('status', '=', (int) $statusFilter);
+            });
+
+        if ($oldestFirst) {
+            $visitsQuery->orderBy('entry_date', 'asc');
+        } else {
+            $visitsQuery->orderByDesc('entry_date');
+        }
+
+        return [
+            'today' => $today,
+            'progress' => $progress,
+            'waiting' => $waiting,
+            'finished' => $finished,
+            'statusFilter' => $statusFilter,
+            'data' => $visitsQuery->get(),
+        ];
     }
     
     public function index_4() 
     {
+        $search = trim((string) request('search', ''));
         $isAssignmentAgent = $this->isServiceAssignmentAgent();
+        $isFiscalAgent = $this->isFiscalAssignmentAgent();
         $assignmentServiceId = $this->serviceAssignmentGroupId();
+        $fiscalServiceId = $this->fiscalAssignmentGroupId();
         $serviceIds=ug::where('a_user','=',Auth::guard('web')->user()->id)->pluck('a_group');
+        if ($isFiscalAgent && !$serviceIds->contains($fiscalServiceId)) {
+            $serviceIds->push($fiscalServiceId);
+        }
         $headServiceIds=ug::where('a_user','=',Auth::guard('web')->user()->id)
             ->where('is_head','=',1)
             ->pluck('a_group');
         $today=visit::wheredate('entry_date',db::raw('CURDATE()'))
             ->where('is_deleted','=',0)
-            ->where(function ($query) use ($headServiceIds, $isAssignmentAgent, $assignmentServiceId) {
-                $query->where('emp_visited','=',Auth::guard('web')->user()->id)
-                    ->orWhere(function ($query) use ($headServiceIds, $isAssignmentAgent, $assignmentServiceId) {
-                        if ($isAssignmentAgent) {
-                            $query->where('service_emp_visited', '=', $assignmentServiceId)
-                                ->whereNull('emp_visited');
-                            return;
-                        }
-                        $query->whereIn('service_emp_visited',$headServiceIds)
-                            ->whereNull('emp_visited');
-                    });
-            })->count();
+            ->whereIn('service_emp_visited', $serviceIds)->count();
         $waiting=visit::wheredate('entry_date',db::raw('CURDATE()'))
             ->where('status','=',0)
             ->where('is_deleted','=',0)
             ->whereNull('emp_visited')
-            ->when($isAssignmentAgent, function ($query) use ($assignmentServiceId) {
-                $query->where('service_emp_visited', '=', $assignmentServiceId);
-            }, function ($query) use ($headServiceIds) {
-                $query->whereIn('service_emp_visited',$headServiceIds);
-            })->count();
+            ->whereIn('service_emp_visited', $serviceIds)->count();
         $progress=visit::wheredate('entry_date',db::raw('CURDATE()'))
             ->where('status','=',1)
-            ->where('is_deleted','=',0)->where('emp_visited','=',Auth::guard('web')->user()->id)->count();
+            ->where('is_deleted','=',0)->whereIn('service_emp_visited', $serviceIds)->count();
         $finished=visit::wheredate('entry_date',db::raw('CURDATE()'))
             ->where('status','=',2)
-            ->where('is_deleted','=',0)->where('emp_visited','=',Auth::guard('web')->user()->id)->count();
-        $visits=db::table('visits')->selectRaw('visits.id,badge_n,visits.is_deleted,organisations.name as org_name,visitors.firstname,status,visitors.lastname,entry_date,users.name as emp_visited,groups.group_name as service_name,visits.subject as subject')
+            ->where('is_deleted','=',0)->whereIn('service_emp_visited', $serviceIds)->count();
+        $visits=db::table('visits')->selectRaw('visits.id,badge_n,visits.is_deleted,organisations.name as org_name,visitors.firstname,status,visitors.lastname,entry_date,users.name as emp_visited,groups.id as service_id,groups.group_name as service_name,visits.subject as subject')
         ->leftjoin('visitors','visitors.id','=','visits.visitor')
         ->leftjoin('organisations','organisations.id','=','visits.organization')
         ->leftjoin('groups','groups.id','=','visits.service_emp_visited')
         ->leftjoin('users','users.id','=','visits.emp_visited')
         ->wheredate('entry_date',db::raw('CURDATE()'))
-        ->whereIn('status',[0,1])
+        ->when($isAssignmentAgent || in_array((int) Auth::guard('web')->user()->profile, [4, 10], true), function ($query) {
+            $query->whereIn('status', [0, 1, 3]);
+        }, function ($query) {
+            $query->whereIn('status', [0, 1]);
+        })
         ->where('visits.is_deleted','=',0)
-        ->where(function ($query) use ($headServiceIds, $isAssignmentAgent, $assignmentServiceId) {
-            $query->where('emp_visited','=',Auth::guard('web')->user()->id)
-                ->orWhere(function ($query) use ($headServiceIds, $isAssignmentAgent, $assignmentServiceId) {
-                    if ($isAssignmentAgent) {
-                        $query->where('service_emp_visited', '=', $assignmentServiceId)
-                            ->whereNull('emp_visited');
-                        return;
-                    }
-                    $query->whereIn('service_emp_visited',$headServiceIds)
-                        ->whereNull('emp_visited');
-                });
+            ->whereIn('service_emp_visited', $serviceIds)
+        ->when($search !== '', function ($query) use ($search) {
+            $this->applyVisitSearchFilter($query, $search, true);
         })
         ->orderBy('entry_date')->get();
+
+        $oldVisits = collect();
+        if ($isFiscalAgent) {
+            $oldVisits = db::table('visits')->selectRaw('visits.id,badge_n,visits.is_deleted,organisations.name as org_name,visitors.firstname,status,visitors.lastname,entry_date,users.name as emp_visited,groups.group_name as service_name,visits.subject as subject')
+                ->leftjoin('visitors','visitors.id','=','visits.visitor')
+                ->leftjoin('organisations','organisations.id','=','visits.organization')
+                ->leftjoin('groups','groups.id','=','visits.service_emp_visited')
+                ->leftjoin('users','users.id','=','visits.emp_visited')
+                ->whereraw('entry_date < CURDATE()')
+                ->where('visits.is_deleted','=',0)
+                ->where(function ($query) use ($headServiceIds, $isAssignmentAgent, $isFiscalAgent, $assignmentServiceId, $fiscalServiceId) {
+                    $query->where('emp_visited','=',Auth::guard('web')->user()->id)
+                        ->orWhere(function ($query) use ($headServiceIds, $isAssignmentAgent, $isFiscalAgent, $assignmentServiceId, $fiscalServiceId) {
+                            if ($isAssignmentAgent) {
+                                $query->where('service_emp_visited', '=', $assignmentServiceId)
+                                    ->whereNull('emp_visited');
+                                return;
+                            }
+                            if ($isFiscalAgent) {
+                                $query->where('service_emp_visited', '=', $fiscalServiceId)
+                                    ->whereNull('emp_visited');
+                                return;
+                            }
+                            $query->whereIn('service_emp_visited',$headServiceIds)
+                                ->whereNull('emp_visited');
+                        });
+                })
+                ->when($search !== '', function ($query) use ($search) {
+                    $this->applyVisitSearchFilter($query, $search, true);
+                })
+                ->orderByDesc('entry_date')
+                ->get();
+        }
         return view('Service.home')
             ->with('url','home')
+            ->with('serviceName', DB::table('groups')->whereIn('id', $serviceIds)->pluck('group_name')->implode(', '))
             ->with('today',$today)
             ->with('progress',$progress)
             ->with('waiting',$waiting)
             ->with('finished',$finished)
-            ->with('data',$visits);
+            ->with('data',$visits)
+            ->with('oldData',$oldVisits)
+            ->with('headServiceIds', $headServiceIds)
+            ->with('isFiscalAgent', $isFiscalAgent);
     }
 
     public function index_9()
     {
+        $search = trim((string) request('search', ''));
         $ddmServiceId = $this->ddmServiceGroupId();
         $serviceIds = ug::where('a_user', '=', Auth::guard('web')->user()->id)->pluck('a_group');
 
@@ -322,13 +406,22 @@ class HomeController extends Controller
             ->wheredate('entry_date', db::raw('CURDATE()'))
             ->where('visits.is_deleted', '=', 0)
             ->where('visits.service_emp_visited', '=', $ddmServiceId)
-            ->whereIn('status', [0, 1])
-            ->where(function ($query) use ($serviceIds, $ddmServiceId) {
-                $query->where('emp_visited', '=', Auth::guard('web')->user()->id)
-                    ->orWhere(function ($query) use ($ddmServiceId) {
-                        $query->where('service_emp_visited', '=', $ddmServiceId)
-                            ->whereNull('emp_visited');
-                    });
+            ->when($this->isServiceAssignmentAgent(), function ($query) {
+                $query->whereIn('status', [0, 1, 3]);
+            }, function ($query) {
+                $query->whereIn('status', [0, 1]);
+            })
+            ->when(!$this->isServiceAssignmentAgent(), function ($query) use ($serviceIds, $ddmServiceId) {
+                $query->where(function ($query) use ($serviceIds, $ddmServiceId) {
+                    $query->where('emp_visited', '=', Auth::guard('web')->user()->id)
+                        ->orWhere(function ($query) use ($ddmServiceId) {
+                            $query->where('service_emp_visited', '=', $ddmServiceId)
+                                ->whereNull('emp_visited');
+                        });
+                });
+            })
+            ->when($search !== '', function ($query) use ($search) {
+                $this->applyVisitSearchFilter($query, $search, true);
             })
             ->orderBy('entry_date')
             ->get();
@@ -393,6 +486,7 @@ class HomeController extends Controller
 
     public function index_2() 
     {
+        $search = trim((string) request('search', ''));
         $period = request('period', 'today');
         $allowedPeriods = ['today', '1_month', '1_year', '2_years'];
         if (!in_array($period, $allowedPeriods, true)) {
@@ -421,7 +515,7 @@ class HomeController extends Controller
             ->count();
         $ant_visited_count = ant_visits::whereBetween('entry_date', [$periodStart, $periodEnd])->count();
 
-        $visits=db::table('visits')->selectRaw('visits.id,visits.is_deleted,organisations.name as org_name,visitors.firstname,status,visitors.lastname,entry_date,users.name as emp_visited,groups.group_name as service_name,visits.subject as subject')
+        $visits=db::table('visits')->selectRaw('visits.id,badge_n,visits.is_deleted,organisations.name as org_name,visitors.firstname,status,visitors.lastname,entry_date,users.name as emp_visited,groups.group_name as service_name,visits.subject as subject')
         ->leftjoin('visitors','visitors.id','=','visits.visitor')
         ->leftjoin('organisations','organisations.id','=','visits.organization')
         ->leftjoin('groups','groups.id','=','visits.service_emp_visited')
@@ -429,6 +523,9 @@ class HomeController extends Controller
         ->whereBetween('entry_date', [$periodStart, $periodEnd])
         ->whereIn('status',[0,1,2,3])
         ->where('visits.is_deleted','=',0)
+        ->when($search !== '', function ($query) use ($search) {
+            $this->applyVisitSearchFilter($query, $search, true);
+        })
         ->orderByDesc('entry_date')
         ->limit($period === 'today' ? 5 : 12)
         ->get();
@@ -475,14 +572,59 @@ class HomeController extends Controller
         );
     }
 
+    private function isFiscalAssignmentAgent(): bool
+    {
+        $user = Auth::guard('web')->user();
+
+        return $user && (
+            $user->name === 'agent_fiscal'
+            || $user->email === 'agent_fiscal@visilog.local'
+        );
+    }
+
     private function serviceAssignmentGroupId(): int
     {
         return 19;
     }
 
+    private function fiscalAssignmentGroupId(): int
+    {
+        return (int) (DB::table('groups')->where('group_name', 'like', '%Fiscal%')->value('id')
+            ?: DB::table('groups')->where('group_name', 'like', '%DFC%')->value('id'));
+    }
+
     private function ddmServiceGroupId(): int
     {
         return 19;
+    }
+
+    private function applyVisitSearchFilter($query, string $search, bool $includeBadge = false): void
+    {
+        $search = trim($search);
+        if ($search === '') {
+            return;
+        }
+
+        $query->where(function ($subQuery) use ($search, $includeBadge) {
+            $subQuery->where('visitors.firstname', 'like', "%{$search}%")
+                ->orWhere('visitors.lastname', 'like', "%{$search}%")
+                ->orWhere('organisations.name', 'like', "%{$search}%")
+                ->orWhere('users.name', 'like', "%{$search}%")
+                ->orWhere('groups.group_name', 'like', "%{$search}%")
+                ->orWhere('visits.subject', 'like', "%{$search}%");
+
+            if ($includeBadge) {
+                $subQuery->orWhere('badge_n', 'like', "%{$search}%");
+            }
+        });
+    }
+
+    private function applyClassicWorkflowFilter($query, string $column = 'workflow_type'): void
+    {
+        $query->where(function ($subQuery) use ($column) {
+            $subQuery->whereNull($column)
+                ->orWhere($column, '=', 'classic');
+        });
     }
 
 }

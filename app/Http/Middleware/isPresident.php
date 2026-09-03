@@ -21,7 +21,7 @@ class isPresident
         return redirect()->route('l_index');
     }
 
-    if ((int) Auth::user()->profile === 2) {
+    if (in_array((int) Auth::user()->profile, [1, 2, 3], true)) {
         return $next($request);
     }
 

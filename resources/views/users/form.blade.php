@@ -43,28 +43,10 @@
             @endif
 
             <section class="panel panel-pad">
-                <div class="mb-6">
-                    <h2 class="text-xl font-semibold text-slate-900">Informations du compte</h2>
-                    <p class="text-sm text-slate-500">Pour creer un nouvel utilisateur, renseignez d'abord le nom utilisateur et le mot de passe, puis completez ses informations personnelles.</p>
-                </div>
+                
 
                 <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                    <div>
-                        <label for="username" class="mb-2 block text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Nom utilisateur *</label>
-                        <input type="text" name="username" id="username" class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-violet-300 focus:bg-white focus:ring-4 focus:ring-violet-100" value="{{ old('username', $user->username ?? $user->name ?? '') }}" required>
-                    </div>
-                    <div>
-                        <label for="password" class="mb-2 block text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Mot de passe {{ $isEdit ? '' : '*' }}</label>
-                        <input type="password" name="password" id="password" class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-violet-300 focus:bg-white focus:ring-4 focus:ring-violet-100" {{ $isEdit ? '' : 'required' }}>
-                    </div>
-                    <div>
-                        <label for="password_confirmation" class="mb-2 block text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Confirmation mot de passe {{ $isEdit ? '' : '*' }}</label>
-                        <input type="password" name="password_confirmation" id="password_confirmation" class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-violet-300 focus:bg-white focus:ring-4 focus:ring-violet-100">
-                    </div>
-                    <div>
-                        <label for="email" class="mb-2 block text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Email *</label>
-                        <input type="email" name="email" id="email" class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-violet-300 focus:bg-white focus:ring-4 focus:ring-violet-100" value="{{ old('email', $user->email ?? '') }}" required>
-                    </div>
+                   
                     <div>
                         <label for="profile" class="mb-2 block text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Profil *</label>
                         <select name="profile" id="profile" class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-violet-300 focus:bg-white focus:ring-4 focus:ring-violet-100" required>
@@ -83,10 +65,7 @@
                         <label for="lastname" class="mb-2 block text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Nom *</label>
                         <input type="text" name="lastname" id="lastname" class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-violet-300 focus:bg-white focus:ring-4 focus:ring-violet-100" value="{{ old('lastname', $user->lastname ?? '') }}" required>
                     </div>
-                    <div>
-                        <label for="phone" class="mb-2 block text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Telephone</label>
-                        <input type="text" name="phone" id="phone" class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-violet-300 focus:bg-white focus:ring-4 focus:ring-violet-100" value="{{ old('phone', $user->phone ?? '') }}">
-                    </div>
+                   
                 </div>
             </section>
 

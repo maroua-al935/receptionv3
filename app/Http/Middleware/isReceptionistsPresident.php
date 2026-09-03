@@ -17,7 +17,7 @@ class isReceptionistsPresident
      */
     public function handle(Request $request, Closure $next)
     {
-        if (in_array((int) auth::guard('web')->user()->profile, [2, 4, 5, 6, 7, 8], true))
+        if (in_array((int) auth::guard('web')->user()->profile, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], true))
         {
             return $next($request);
         }else{

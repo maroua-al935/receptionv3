@@ -26,19 +26,12 @@ class LoginController extends Controller
            'password'=>$valid['password']
         ];
 
-        if ($this->attemptLocalLogin($valid['name'], $valid['password'], $request->boolean('remember')) || $this->attemptLdapLogin($creds)) {
+        if ($this->attemptLocalLogin($valid['name'], $valid['password'], true) || $this->attemptLdapLogin($creds)) {
             $user = Auth::guard('web')->user();
             $hasservice = ug::where('a_user', '=', $user->id)->count();
             $profile = (int) $user->profile;
-            if (in_array($profile, [1, 2, 3, 4, 5, 6, 7, 8, 9], true)) {
-                return match ($profile) {
-                    2 => redirect()->route('home'),
-                    3, 4, 8 => redirect()->route('i_visitors'),
-                    5 => redirect()->route('home'),
-                    6, 7 => redirect()->route('i_visitors_ant'),
-                    9 => redirect()->route('home'),
-                    default => redirect()->route('home'),
-                };
+            if (in_array($profile, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], true)) {
+                return redirect()->route('home');
             } else {
                 $msg="Vous n'êtes pas autorisé à utiliser cette application, veuillez ouvrir un ticket de support ou contacter le service informatique.";
                 return $this->logout($request)->withErrors(['failed'=>$msg]);
@@ -52,7 +45,7 @@ class LoginController extends Controller
     private function attemptLdapLogin(array $creds): bool
     {
         try {
-            return Auth::attempt($creds);
+            return Auth::attempt($creds, true);
         } catch (Throwable $e) {
             report($e);
 

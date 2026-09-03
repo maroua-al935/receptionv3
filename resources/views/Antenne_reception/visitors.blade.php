@@ -70,7 +70,7 @@
                                     </td>
                                     <td class="px-5 py-4">
                                         <div class="flex justify-end gap-2">
-                                            <a class="antenne-icon-btn" href="{{ route('i_ant_info',$row->id) }}" title="Voir">
+                                            <a class="antenne-icon-btn" href="{{ route('i_ant_info',$row->id) }}" title="Details complets">
                                                 <svg class="h-4 w-4" viewBox="0 0 24 24"><path fill="currentColor" d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5m0 12.5a5 5 0 1 1 0-10a5 5 0 0 1 0 10m0-8a3 3 0 1 0 0 6a3 3 0 0 0 0-6"/></svg>
                                             </a>
                                             @if((int) Auth::guard('web')->user()->profile === 6 || (($isAntenneHead ?? false) && empty($row->emp_visited)))
@@ -134,7 +134,7 @@
                                     </td>
                                     <td class="px-5 py-4">
                                         <div class="flex justify-end gap-2">
-                                            <a class="antenne-icon-btn" href="{{ route('i_ant_info',$row->id) }}" title="Voir">
+                                            <a class="antenne-icon-btn" href="{{ route('i_ant_info',$row->id) }}" title="Details complets">
                                                 <svg class="h-4 w-4" viewBox="0 0 24 24"><path fill="currentColor" d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5m0 12.5a5 5 0 1 1 0-10a5 5 0 0 1 0 10m0-8a3 3 0 1 0 0 6a3 3 0 0 0 0-6"/></svg>
                                             </a>
                                             @if((int) Auth::guard('web')->user()->profile === 6 || (($isAntenneHead ?? false) && empty($row->emp_visited)))

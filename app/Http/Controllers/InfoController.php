@@ -23,26 +23,78 @@ class InfoController extends Controller
                     ->leftjoin('organisations','visits.organization','=','organisations.id')
                     ->leftjoin('groups','groups.id','=','visits.service_emp_visited')
                     ->leftjoin('users','users.id','=','visits.emp_visited')
+                    ->leftjoin('users as validators','validators.id','=','visits.validation_by')
                     ->leftjoin('attachments','visitors.attachment','=','attachments.id')
                     ->leftjoin('positions','visitors.position','=','positions.id')
                     ->leftjoin('id_types','visitors.id_type','=','id_types.id')
                     ->leftjoin('categories','visits.category','=','categories.id')
                     ->where('visits.id','=',$id)
-                    ->get(['visitors.firstname as firstname','visitors.lastname as lastname',
-                        'organisations.name as organisation',
-                        'positions.name as position',
-                        'attachments.filepath as filepath','cin',
-                        'id_types.name as id_type',
-                        'categories.name as category', 'observations',
-                        'entry_date','exit_date',
-                        'users.name as usrname','groups.group_name as service',
-                        'status','hashost','subject',
+                    ->get([
+                        'visits.id as visit_id',
+                        'visits.visitor as visitor_id',
+                        'visits.organization as organisation_id',
+                        'visits.category as category_id',
                         'visits.emp_visited as emp_visited_id',
-                        'visits.service_emp_visited as service_id']);
+                        'visits.service_emp_visited as service_id',
+                        'visits.wilaya as wilaya',
+                        'visits.status',
+                        'visits.hashost',
+                        'visits.subject',
+                        'visits.is_deleted as visit_is_deleted',
+                        'visits.entry_date',
+                        'visits.exit_date',
+                        'visits.validation_time',
+                        'visits.accept_time',
+                        'visits.sendup_time',
+                        'visits.validation_by',
+                        'visits.badge_n',
+                        'visits.observations',
+                        'visitors.id as visitor_id_ref',
+                        'visitors.firstname as firstname',
+                        'visitors.lastname as lastname',
+                        'visitors.created_at as visitor_created_at',
+                        'visitors.updated_at as visitor_updated_at',
+                        'visitors.nin',
+                        'visitors.position as visitor_position_id',
+                        'organisations.name as organisation',
+                        'positions.id as position_id',
+                        'positions.name as position',
+                        'attachments.id as attachment_id',
+                        'attachments.filepath as filepath',
+                        'cin',
+                        'id_types.id as id_type_id',
+                        'id_types.name as id_type',
+                        'categories.name as category',
+                        'users.name as usrname',
+                        'users.username as user_username',
+                        'users.firstname as user_firstname',
+                        'users.lastname as user_lastname',
+                        'users.email as user_email',
+                        'users.phone as user_phone',
+                        'groups.id as group_id',
+                        'groups.group_name as service',
+                        'groups.group_full_dn as service_full_dn',
+                        'groups.group_dn as service_dn',
+                        'groups.group_superior as service_superior',
+                        'groups.group_superior_alt as service_superior_alt',
+                        'validators.name as validation_by_name',
+                        'validators.username as validation_by_username',
+                        'validators.firstname as validation_by_firstname',
+                        'validators.lastname as validation_by_lastname',
+                    ]);
+        if ($data->isNotEmpty()) {
+            $visit = $data[0];
+            if (empty($visit->position) && !empty($visit->position_id)) {
+                $visit->position = DB::table('positions')->where('id', '=', $visit->position_id)->value('name') ?? $visit->position;
+            }
+            if (empty($visit->position) && isset($visit->visitor_position_id)) {
+                $visit->position = DB::table('positions')->where('id', '=', $visit->visitor_position_id)->value('name') ?? $visit->position;
+            }
+        }
         if ($data->isEmpty()) {
             abort(404);
         }
-        if ((int) Auth::guard('web')->user()->profile === 4 && !$this->canServiceUserViewVisit($data[0])) {
+        if (in_array((int) Auth::guard('web')->user()->profile, [4, 10], true) && !$this->canServiceUserViewVisit($data[0])) {
             abort(403);
         }
 
@@ -106,7 +158,27 @@ class InfoController extends Controller
             });
         }
 
-        return view('info_index')->with('url','guest')->with('data',$data)->with('audits', $audits);
+        $profile = (int) Auth::guard('web')->user()->profile;
+        $viewName = 'info_index';
+        if (in_array($profile, [1, 2, 3], true)) {
+            $viewName = 'President.info_index';
+        } elseif (in_array($profile, [4, 8, 9, 10], true)) {
+            $viewName = 'Service.info_index';
+        } elseif ($profile === 5) {
+            $viewName = 'Reception.info_index';
+        }
+
+        if (request()->boolean('embed')) {
+            return view('partials.visit-info-modern')
+                ->with('url', 'guest')
+                ->with('data', $data)
+                ->with('audits', $audits)
+                ->with('title', $data[0]->firstname . ' ' . $data[0]->lastname)
+                ->with('subtitle', 'Details du visiteur et informations de passage.')
+                ->with('embedded', true);
+        }
+
+        return view($viewName)->with('url','guest')->with('data',$data)->with('audits', $audits);
     }
 
     private function canServiceUserViewVisit($visit): bool
@@ -120,7 +192,18 @@ class InfoController extends Controller
             return true;
         }
 
+        if ((int) $user->profile === 4 && $visit->service_id) {
+            return DB::table('user_groups')
+                ->where('a_user', '=', $user->id)
+                ->where('a_group', '=', $visit->service_id)
+                ->exists();
+        }
+
         if ($this->isServiceAssignmentAgent() && (int) $visit->service_id === $this->serviceAssignmentGroupId()) {
+            return true;
+        }
+
+        if ($this->isFiscalAssignmentAgent() && (int) $visit->service_id === $this->fiscalAssignmentGroupId()) {
             return true;
         }
 
@@ -145,9 +228,25 @@ class InfoController extends Controller
         );
     }
 
+    private function isFiscalAssignmentAgent(): bool
+    {
+        $user = Auth::guard('web')->user();
+
+        return $user && (
+            $user->name === 'agent_fiscal'
+            || $user->email === 'agent_fiscal@visilog.local'
+        );
+    }
+
     private function serviceAssignmentGroupId(): int
     {
         return 19;
+    }
+
+    private function fiscalAssignmentGroupId(): int
+    {
+        return (int) (DB::table('groups')->where('group_name', 'like', '%Fiscal%')->value('id')
+            ?: DB::table('groups')->where('group_name', 'like', '%DFC%')->value('id'));
     }
 
     public function ant_info_index($id) {

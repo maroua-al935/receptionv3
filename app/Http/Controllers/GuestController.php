@@ -35,6 +35,9 @@ class GuestController extends Controller
     public function get_index()
     {
         switch (Auth::guard('web')->user()->profile) {
+            case 1:
+                return $this->index_2();
+                break;
             case 6:
                 return $this->index_6();
                 break;
@@ -47,7 +50,11 @@ class GuestController extends Controller
             case 8:
                 return $this->index_8();
                 break;
+            case 3:
+                return $this->index_2();
+                break;
             case 4:
+            case 10:
                 return $this->index_4();
                 break;
 
@@ -59,6 +66,101 @@ class GuestController extends Controller
                 return $this->index_4();
                 break;
         }
+    }
+
+    public function trash()
+    {
+        $profile = (int) Auth::guard('web')->user()->profile;
+        if (!in_array($profile, [1, 2, 3], true)) {
+            abort(403);
+        }
+
+        $visits = DB::table('visits')
+            ->leftJoin('visitors', 'visitors.id', '=', 'visits.visitor')
+            ->leftJoin('groups', 'groups.id', '=', 'visits.service_emp_visited')
+            ->where('visits.is_deleted', 1)
+            ->get([
+                'visits.id',
+                'visitors.firstname',
+                'visitors.lastname',
+                'groups.group_name as service_name',
+                'visits.entry_date',
+                'visits.deleted_at',
+            ])
+            ->map(function ($visit) {
+                $visit->type = 'Siege';
+                return $visit;
+            });
+
+        $antenneVisits = DB::table('antenne_visits')
+            ->leftJoin('antenne_visitors', 'antenne_visitors.id', '=', 'antenne_visits.visitor')
+            ->leftJoin('antennes', 'antennes.id', '=', 'antenne_visits.ant_location')
+            ->where('antenne_visits.is_deleted', 1)
+            ->get([
+                'antenne_visits.id',
+                'antenne_visitors.firstname',
+                'antenne_visitors.lastname',
+                'antennes.antenne_name as service_name',
+                'antenne_visits.entry_date',
+                'antenne_visits.deleted_at',
+            ])
+            ->map(function ($visit) {
+                $visit->type = 'Antenne';
+                return $visit;
+            });
+
+        $deletedVisits = $visits->merge($antenneVisits)
+            ->sortByDesc('deleted_at')
+            ->values();
+
+        return view('President.trash', [
+            'url' => 'trash',
+            'deletedVisits' => $deletedVisits,
+        ]);
+    }
+
+    public function restore(Request $request, $type, $id)
+    {
+        $profile = (int) Auth::guard('web')->user()->profile;
+        if (!in_array($profile, [1, 2, 3], true)) {
+            abort(403);
+        }
+
+        if ($type === 'siege') {
+            $restored = DB::table('visits')->where('id', $id)->where('is_deleted', 1)->update([
+                'is_deleted' => 0,
+                'deleted_at' => null,
+            ]);
+            if (!$restored) {
+                abort(404);
+            }
+            $this->auditVisit($id, 'visit_restored', [
+                'is_deleted' => 1,
+            ], [
+                'is_deleted' => 0,
+            ]);
+
+            return redirect()->route('i_trash')->with('success', 'Visite recuperee avec succes.');
+        }
+
+        if ($type === 'antenne') {
+            $restored = DB::table('antenne_visits')->where('id', $id)->where('is_deleted', 1)->update([
+                'is_deleted' => 0,
+                'deleted_at' => null,
+            ]);
+            if (!$restored) {
+                abort(404);
+            }
+            $this->auditVisit($id, 'antenne_visit_restored', [
+                'is_deleted' => 1,
+            ], [
+                'is_deleted' => 0,
+            ]);
+
+            return redirect()->route('i_trash')->with('success', 'Visite recuperee avec succes.');
+        }
+
+        abort(404);
     }
     public function index_6()
     {
@@ -145,7 +247,7 @@ class GuestController extends Controller
 
     public function index_5()
     {
-        $visits = db::table('visits')->selectRaw('visits.id,badge_n,visits.is_deleted,organisations.name as org_name,visitors.firstname,status,visitors.lastname,entry_date,users.name as emp_visited,groups.group_name as service_name')
+        $visits = db::table('visits')->selectRaw('visits.id,badge_n,visits.workflow_type,visits.is_deleted,organisations.name as org_name,visitors.firstname,status,visitors.lastname,entry_date,users.name as emp_visited,groups.group_name as service_name')
             ->leftjoin('visitors', 'visitors.id', '=', 'visits.visitor')
             ->leftjoin('organisations', 'organisations.id', '=', 'visits.organization')
             ->leftjoin('groups', 'groups.id', '=', 'visits.service_emp_visited')
@@ -180,7 +282,7 @@ class GuestController extends Controller
             ->where('visits.is_deleted', '=', 0)
             ->orderBy('entry_date')->get();
 
-        $visits_old = db::table('visits')->selectRaw('visits.id,badge_n,visits.is_deleted,organisations.name as org_name,visitors.firstname,status,visitors.lastname,entry_date,users.name as emp_visited,groups.group_name as service_name')
+        $visits_old = db::table('visits')->selectRaw('visits.id,badge_n,visits.workflow_type,visits.is_deleted,organisations.name as org_name,visitors.firstname,status,visitors.lastname,entry_date,users.name as emp_visited,groups.group_name as service_name')
             ->leftjoin('visitors', 'visitors.id', '=', 'visits.visitor')
             ->leftjoin('organisations', 'organisations.id', '=', 'visits.organization')
             ->leftjoin('groups', 'groups.id', '=', 'visits.service_emp_visited')
@@ -200,23 +302,20 @@ class GuestController extends Controller
             ->where('is_head', '=', 1)
             ->pluck('a_group');
         $isAssignmentAgent = $this->isServiceAssignmentAgent();
+        $isFiscalAgent = $this->isFiscalAssignmentAgent();
         $assignmentServiceId = $this->serviceAssignmentGroupId();
+        $fiscalServiceId = $this->fiscalAssignmentGroupId();
+        if ($isFiscalAgent && !$serviceIds->contains($fiscalServiceId)) {
+            $serviceIds->push($fiscalServiceId);
+        }
 
-        $visibleScope = function ($query) use ($headServiceIds, $isAssignmentAgent, $assignmentServiceId) {
-            $query->where('visits.emp_visited', '=', Auth::guard('web')->user()->id)
-                ->orWhere(function ($query) use ($headServiceIds, $isAssignmentAgent, $assignmentServiceId) {
-                    if ($isAssignmentAgent) {
-                        $query->where('visits.service_emp_visited', '=', $assignmentServiceId)
-                            ->whereNull('visits.emp_visited');
-                        return;
-                    }
-
-                    $query->whereIn('visits.service_emp_visited', $headServiceIds)
-                        ->whereNull('visits.emp_visited');
-                });
+        $visibleScope = function ($query) use ($serviceIds) {
+            // Tous les membres d'un service voient les visites de leurs services.
+            // emp_visited reste la personne qui a pris en charge la visite.
+            $query->whereIn('visits.service_emp_visited', $serviceIds);
         };
 
-        $select = 'visits.id,badge_n,visits.is_deleted,organisations.name as org_name,visitors.firstname,status,visitors.lastname,entry_date,users.name as emp_visited,groups.group_name as service_name';
+        $select = 'visits.id,badge_n,visits.is_deleted,organisations.name as org_name,visitors.firstname,status,visitors.lastname,entry_date,users.name as emp_visited,groups.id as service_id,groups.group_name as service_name';
 
         $visits = db::table('visits')->selectRaw($select)
             ->leftjoin('visitors', 'visitors.id', '=', 'visits.visitor')
@@ -237,6 +336,35 @@ class GuestController extends Controller
             ->whereIn('status', [0, 1, 3])
             ->where('visits.is_deleted', '=', 0)
             ->where($visibleScope)
+            ->orderByDesc('entry_date')->get();
+
+        return view('Service.visitors', ['url' => 'guest'], ['data' => $visits, 'old' => $visits_old, 'headServiceIds' => $headServiceIds]);
+    }
+
+    public function index_3()
+    {
+        $serviceIds = ug::where('a_user', '=', Auth::guard('web')->user()->id)->pluck('a_group');
+        $select = 'visits.id,badge_n,visits.is_deleted,organisations.name as org_name,visitors.firstname,status,visitors.lastname,entry_date,users.name as emp_visited,groups.group_name as service_name';
+
+        $visits = db::table('visits')->selectRaw($select)
+            ->leftjoin('visitors', 'visitors.id', '=', 'visits.visitor')
+            ->leftjoin('organisations', 'organisations.id', '=', 'visits.organization')
+            ->leftjoin('groups', 'groups.id', '=', 'visits.service_emp_visited')
+            ->leftjoin('users', 'users.id', '=', 'visits.emp_visited')
+            ->wheredate('entry_date', db::raw('CURDATE()'))
+            ->where('visits.is_deleted', '=', 0)
+            ->whereIn('service_emp_visited', $serviceIds)
+            ->orderByDesc('entry_date')->get();
+
+        $visits_old = db::table('visits')->selectRaw($select)
+            ->leftjoin('visitors', 'visitors.id', '=', 'visits.visitor')
+            ->leftjoin('organisations', 'organisations.id', '=', 'visits.organization')
+            ->leftjoin('groups', 'groups.id', '=', 'visits.service_emp_visited')
+            ->leftjoin('users', 'users.id', '=', 'visits.emp_visited')
+            ->whereraw('entry_date < CURDATE()')
+            ->whereIn('status', [0, 1, 3])
+            ->where('visits.is_deleted', '=', 0)
+            ->whereIn('service_emp_visited', $serviceIds)
             ->orderByDesc('entry_date')->get();
 
         return view('Service.visitors', ['url' => 'guest'], ['data' => $visits, 'old' => $visits_old]);
@@ -358,8 +486,15 @@ class GuestController extends Controller
 
     public function ant_edit_index(Request $request, $id)
     {
-        $ant_id = ant_user::where('ant_user', '=', Auth::guard('web')->user()->id)->get();
-        $ant_loc = antennes::where('id', '=', $ant_id[0]['ant_group'])->get();
+        $profile = (int) Auth::guard('web')->user()->profile;
+        $antUser = ant_user::where('ant_user', '=', Auth::guard('web')->user()->id)->first();
+        if (!$antUser && !in_array($profile, [1, 2, 3], true)) {
+            abort(403);
+        }
+
+        $ant_loc = $antUser
+            ? antennes::where('id', '=', $antUser->ant_group)->get()
+            : collect([(object) ['antenne_name' => 'President']]);
         $visits = db::table('antenne_visits')
             ->selectRaw('antenne_visitors.firstname,antenne_visitors.lastname,category,status,antenne_visitors.lastname,entry_date,users.name as usrname, organisations.name as org_name, antenne_visitors.id_type as id_type')
             ->leftjoin('antenne_visitors', 'antenne_visitors.id', '=', 'antenne_visits.visitor')
@@ -367,14 +502,15 @@ class GuestController extends Controller
             ->leftjoin('id_types', 'antenne_visitors.id_type', '=', 'id_types.id')
             ->leftjoin('antennes', 'antennes.id', '=', 'antenne_visits.ant_location')
             ->leftjoin('users', 'users.id', '=', 'antenne_visits.emp_visited')
-            ->where('antenne_visits.id', '=', $id)->get();
+            ->where('antenne_visits.id', '=', $id)
+            ->get();
         $cats = db::table('categories')->selectRaw('id,name')->get();
         $id_types = db::table('id_types')->selectRaw('id,name')->get();
         return view('Antenne_reception.edit_index')
             ->with('data', $visits)
             ->with('url', 'guest')
             ->with('cats', $cats)
-            ->with('loc', $ant_loc[0]['antenne_name'])
+            ->with('loc', $ant_loc[0]->antenne_name ?? 'cette antenne')
             ->with('id_types', $id_types);
     }
 
@@ -388,9 +524,13 @@ class GuestController extends Controller
         if (Auth::guard('web')->user()->profile == 7) {
             return $this->ant_service_edit_index($request, $id);
         }
+        $antVisit = DB::table('antenne_visits')->where('id', '=', $id)->first();
+        if ($antVisit) {
+            return $this->ant_edit_index($request, $id);
+        }
 
         $visits = db::table('visits')
-            ->selectRaw('visitors.firstname,visitors.lastname,category,status,badge_n,visitors.lastname,entry_date,users.name as usrname,groups.group_name as service_name,groups.id as service_id, organisations.name as org_name, visitors.id_type as id_type, emp_visited')
+            ->selectRaw('visitors.firstname,visitors.lastname,category,status,badge_n,visitors.lastname,entry_date,users.name as usrname,groups.group_name as service_name,groups.id as service_id, organisations.name as org_name, visitors.id_type as id_type, emp_visited, visits.workflow_type as workflow_type, visits.wilaya as wilaya')
             ->leftjoin('visitors', 'visitors.id', '=', 'visits.visitor')
             ->leftjoin('organisations', 'visits.organization', '=', 'organisations.id')
             ->leftjoin('id_types', 'visitors.id_type', '=', 'id_types.id')
@@ -403,16 +543,25 @@ class GuestController extends Controller
         }
 
         $profile = (int) Auth::guard('web')->user()->profile;
-        if ($profile === 8 && in_array((int) $visits[0]->status, [2, 3], true)) {
+        if ($profile === 8 && (($visits[0]->workflow_type ?? 'classic') === 'bog' || in_array((int) $visits[0]->status, [2, 3], true))) {
             abort(403);
         }
-        if (in_array($profile, [3, 4], true)) {
+        if ($this->isBadgeSaisieAgent() && !in_array((int) $visits[0]->status, [0, 1, 3], true)) {
+            abort(403);
+        }
+        if (in_array($profile, [3, 4, 10], true)) {
             $serviceIds = ug::where('a_user', '=', Auth::guard('web')->user()->id)->pluck('a_group')->toArray();
             $isAssignmentAgent = $this->isServiceAssignmentAgent();
-            if ((!$isAssignmentAgent && !in_array((int) $visits[0]->service_id, array_map('intval', $serviceIds), true)) || !is_null($visits[0]->emp_visited)) {
+            $isFiscalAgent = $this->isFiscalAssignmentAgent();
+            if ($profile === 4 && !$this->isServiceHead(Auth::guard('web')->user()->id, $visits[0]->service_id)) {
                 abort(403);
             }
-            if ($profile === 4 && !$isAssignmentAgent && !$this->isServiceHead(Auth::guard('web')->user()->id, $visits[0]->service_id)) {
+            $assignedToAnotherUser = !is_null($visits[0]->emp_visited)
+                && (int) $visits[0]->emp_visited !== (int) Auth::guard('web')->user()->id;
+            if ((!$isAssignmentAgent && !$isFiscalAgent && !in_array((int) $visits[0]->service_id, array_map('intval', $serviceIds), true)) || $assignedToAnotherUser) {
+                abort(403);
+            }
+            if ($profile === 10 && !$isFiscalAgent && (int) $visits[0]->service_id !== $this->fiscalAssignmentGroupId()) {
                 abort(403);
             }
         }
@@ -420,7 +569,7 @@ class GuestController extends Controller
         $id_types = db::table('id_types')->selectRaw('id,name')->get();
         $services = group::get(['id', 'group_name']);
         $serviceUsers = collect();
-        if (in_array($profile, [3, 4], true)) {
+        if (in_array($profile, [3, 4, 10], true)) {
             $serviceUsers = ug::select('users.id', 'users.name')
                 ->leftjoin('users', 'users.id', '=', 'user_groups.a_user')
                 ->where('user_groups.a_group', '=', $visits[0]->service_id)
@@ -442,8 +591,62 @@ class GuestController extends Controller
 
     public function ant_edit(Request $request, $id)
     {
-        if (Auth::guard('web')->user()->profile == 7) {
+        $profile = (int) Auth::guard('web')->user()->profile;
+        if ($profile === 7) {
             return $this->ant_service_edit($request, $id);
+        }
+
+        if (in_array($profile, [1, 2, 3], true)) {
+            $visitor_valid = $request->validate([
+                'fname' => ['required', 'bail'],
+                'lname' => ['required', 'bail'],
+                'org' => ['nullable'],
+                'category' => ['required', 'bail'],
+                'status' => ['required'],
+            ]);
+
+            $oldVisit = DB::table('antenne_visits')->where('id', '=', $id)->first();
+            if (!$oldVisit) {
+                abort(404);
+            }
+
+            $org_id = null;
+            if (!empty($visitor_valid['org'])) {
+                $org = organisation::where('name', '=', $visitor_valid['org'])->first();
+                if (!$org) {
+                    $org = organisation::create(['name' => $visitor_valid['org']]);
+                }
+                $org_id = $org->id;
+            }
+
+            DB::table('antenne_visits')->where('id', '=', $id)
+                ->update([
+                    'category' => $visitor_valid['category'],
+                    'organization' => $org_id,
+                    'status' => $visitor_valid['status'],
+                ]);
+
+            DB::table('antenne_visitors')->where('id', '=', $oldVisit->visitor)
+                ->update([
+                    'firstname' => $visitor_valid['fname'],
+                    'lastname' => $visitor_valid['lname'],
+                ]);
+
+            $this->auditVisit($id, 'antenne_visit_updated_by_president', [
+                'category' => $oldVisit->category ?? null,
+                'organization' => $oldVisit->organization ?? null,
+                'status' => $oldVisit->status ?? null,
+                'visitor_firstname' => DB::table('antenne_visitors')->where('id', '=', $oldVisit->visitor)->value('firstname'),
+                'visitor_lastname' => DB::table('antenne_visitors')->where('id', '=', $oldVisit->visitor)->value('lastname'),
+            ], [
+                'category' => $visitor_valid['category'],
+                'organization' => $org_id,
+                'status' => $visitor_valid['status'],
+                'visitor_firstname' => $visitor_valid['fname'],
+                'visitor_lastname' => $visitor_valid['lname'],
+            ]);
+
+            return redirect()->route('i_visitors_ant');
         }
 
         $visitor_valid = $request->validate([
@@ -503,25 +706,107 @@ class GuestController extends Controller
             return $this->ant_edit($request, $id);
         }
         $profile = (int) Auth::guard('web')->user()->profile;
+        $isPresident = in_array($profile, [1, 2, 3], true);
+
+        if ($isPresident) {
+            $visitor_valid = $request->validate([
+                'fname' => ['required', 'bail'],
+                'lname' => ['required', 'bail'],
+                'org' => ['nullable'],
+                'hostname' => ['nullable'],
+                'service' => ['nullable'],
+                'badge_n' => ['nullable', 'max:100'],
+                'category' => ['required', 'bail'],
+                'status' => ['required'],
+            ]);
+
+            $oldVisit = DB::table('visits')->where('id', '=', $id)->first();
+            if (!$oldVisit) {
+                abort(404);
+            }
+
+            $orgId = null;
+            if (!empty($visitor_valid['org'])) {
+                $org = organisation::where('name', '=', $visitor_valid['org'])->first();
+                if (!$org) {
+                    $org = organisation::create(['name' => $visitor_valid['org']]);
+                }
+                $orgId = $org->id;
+            }
+
+            DB::table('visits')->where('id', '=', $id)->update([
+                'category' => $visitor_valid['category'],
+                'organization' => $orgId,
+                'service_emp_visited' => $visitor_valid['service'] ?? null,
+                'emp_visited' => $visitor_valid['hostname'] ?? null,
+                'badge_n' => $visitor_valid['badge_n'] ?? null,
+                'status' => $visitor_valid['status'],
+            ]);
+
+            DB::table('visitors')->where('id', '=', $oldVisit->visitor)->update([
+                'firstname' => $visitor_valid['fname'],
+                'lastname' => $visitor_valid['lname'],
+            ]);
+
+            $this->auditVisit($id, 'visit_updated_by_president', [
+                'category' => $oldVisit->category ?? null,
+                'organization' => $oldVisit->organization ?? null,
+                'service_emp_visited' => $oldVisit->service_emp_visited ?? null,
+                'emp_visited' => $oldVisit->emp_visited ?? null,
+                'badge_n' => $oldVisit->badge_n ?? null,
+                'status' => $oldVisit->status ?? null,
+                'visitor_firstname' => DB::table('visitors')->where('id', '=', $oldVisit->visitor)->value('firstname'),
+                'visitor_lastname' => DB::table('visitors')->where('id', '=', $oldVisit->visitor)->value('lastname'),
+            ], [
+                'category' => $visitor_valid['category'],
+                'organization' => $orgId,
+                'service_emp_visited' => $visitor_valid['service'] ?? null,
+                'emp_visited' => $visitor_valid['hostname'] ?? null,
+                'badge_n' => $visitor_valid['badge_n'] ?? null,
+                'status' => $visitor_valid['status'],
+                'visitor_firstname' => $visitor_valid['fname'],
+                'visitor_lastname' => $visitor_valid['lname'],
+            ]);
+
+            return redirect()->route('home');
+        }
 
         if ($profile === 8) {
             $valid = $request->validate([
                 'service' => ['required'],
+                'org' => ['nullable'],
+                'wilaya' => ['nullable', 'array'],
+                'wilaya.*' => ['string', 'max:100'],
             ]);
 
             $visit = db::table('visits')->where('id', '=', $id)->where('is_deleted', '=', 0)->first();
-            if (!$visit || in_array((int) $visit->status, [2, 3], true)) {
+            if (!$visit || ($visit->workflow_type ?? 'classic') === 'bog' || in_array((int) $visit->status, [2, 3], true)) {
                 abort(403);
+            }
+
+            $orgId = null;
+            if (!empty($valid['org'])) {
+                $org = organisation::where('name', '=', $valid['org'])->first();
+                if (!$org) {
+                    $org = organisation::create(['name' => $valid['org']]);
+                }
+                $orgId = $org->id;
+            }
+
+            $updates = [
+                'service_emp_visited' => $valid['service'],
+                'emp_visited' => null,
+                'organization' => $orgId,
+            ];
+            if (Schema::hasColumn('visits', 'wilaya') && array_key_exists('wilaya', $valid)) {
+                $updates['wilaya'] = !empty($valid['wilaya']) ? json_encode(array_values($valid['wilaya']), JSON_UNESCAPED_UNICODE) : null;
             }
 
             $updated = db::table('visits')
                 ->where('id', '=', $id)
                 ->where('is_deleted', '=', 0)
                 ->whereNotIn('status', [2, 3])
-                ->update([
-                    'service_emp_visited' => $valid['service'],
-                    'emp_visited' => null,
-                ]);
+                ->update($updates);
 
             if (!$updated) {
                 abort(403);
@@ -530,15 +815,19 @@ class GuestController extends Controller
             $this->auditVisit($id, 'orientation_updated', [
                 'service_emp_visited' => $visit->service_emp_visited,
                 'emp_visited' => $visit->emp_visited,
+                'organization' => $visit->organization ?? null,
+                'wilaya' => $visit->wilaya ?? null,
             ], [
                 'service_emp_visited' => $valid['service'],
                 'emp_visited' => null,
+                'organization' => $orgId,
+                'wilaya' => !empty($valid['wilaya']) ? json_encode(array_values($valid['wilaya']), JSON_UNESCAPED_UNICODE) : null,
             ]);
 
-            return redirect()->route('i_visitors');
+            return redirect()->route('home');
         }
 
-        if (in_array($profile, [3, 4], true)) {
+        if (in_array($profile, [3, 4, 10], true)) {
             $valid = $request->validate([
                 'hostname' => ['required'],
             ]);
@@ -547,20 +836,30 @@ class GuestController extends Controller
             if (!$visit || !is_null($visit->emp_visited)) {
                 abort(403);
             }
+            if ($profile === 4 && !$this->isServiceHead(Auth::guard('web')->user()->id, $visit->service_emp_visited)) {
+                abort(403);
+            }
 
             $serviceIds = ug::where('a_user', '=', Auth::guard('web')->user()->id)->pluck('a_group')->toArray();
             $isAssignmentAgent = $this->isServiceAssignmentAgent();
+            $isFiscalAgent = $this->isFiscalAssignmentAgent();
             if ($isAssignmentAgent && (int) $visit->service_emp_visited !== $this->serviceAssignmentGroupId()) {
                 abort(403);
             }
-            if (!$isAssignmentAgent && !in_array((int) $visit->service_emp_visited, array_map('intval', $serviceIds), true)) {
+            if ($isFiscalAgent && (int) $visit->service_emp_visited !== $this->fiscalAssignmentGroupId()) {
                 abort(403);
             }
-            if ($profile === 4 && !$isAssignmentAgent && !$this->isServiceHead(Auth::guard('web')->user()->id, $visit->service_emp_visited)) {
+            if (!$isAssignmentAgent && !$isFiscalAgent && !in_array((int) $visit->service_emp_visited, array_map('intval', $serviceIds), true)) {
                 abort(403);
             }
+            if ($profile === 10 && !$isFiscalAgent && (int) $visit->service_emp_visited !== $this->fiscalAssignmentGroupId()) {
+                abort(403);
+            }
+            $hostId = $profile === 4
+                ? Auth::guard('web')->user()->id
+                : $valid['hostname'];
             $hostInService = ug::where('a_group', '=', $visit->service_emp_visited)
-                ->where('a_user', '=', $valid['hostname'])
+                ->where('a_user', '=', $hostId)
                 ->exists();
             if (!$hostInService) {
                 abort(403);
@@ -568,22 +867,22 @@ class GuestController extends Controller
 
             db::table('visits')->where('id', '=', $id)
                 ->update([
-                    'emp_visited' => $valid['hostname'],
+                    'emp_visited' => $hostId,
                 ]);
 
             $this->auditVisit($id, 'host_assigned_by_service', [
                 'emp_visited' => $visit->emp_visited,
             ], [
-                'emp_visited' => $valid['hostname'],
+                'emp_visited' => $hostId,
             ]);
 
-            return redirect()->route('l_index');
+            return redirect()->route('home');
         }
 
         if ($profile === 9) {
             $valid = $request->validate([
-                'hostname' => ['required'],
-                'status' => ['required', 'integer', 'in:1,2,3'],
+                'hostname' => ['nullable'],
+                'status' => ['required', 'integer', 'in:1,3'],
             ]);
 
             $visit = DB::table('visits')->where('id', '=', $id)->where('is_deleted', '=', 0)->first();
@@ -595,17 +894,22 @@ class GuestController extends Controller
                 abort(403);
             }
 
-            $hostInService = ug::where('a_group', '=', $this->serviceAssignmentGroupId())
-                ->where('a_user', '=', $valid['hostname'])
-                ->exists();
-            if (!$hostInService) {
-                abort(403);
+            if (!empty($valid['hostname'])) {
+                $hostInService = ug::where('a_group', '=', $this->serviceAssignmentGroupId())
+                    ->where('a_user', '=', $valid['hostname'])
+                    ->exists();
+                if (!$hostInService) {
+                    abort(403);
+                }
             }
 
             $updates = [
-                'emp_visited' => $valid['hostname'],
                 'status' => (int) $valid['status'],
             ];
+
+            if (!empty($valid['hostname'])) {
+                $updates['emp_visited'] = $valid['hostname'];
+            }
 
             if ((int) $valid['status'] === 1 && empty($visit->accept_time)) {
                 $updates['accept_time'] = Carbon::now();
@@ -615,18 +919,32 @@ class GuestController extends Controller
                 $updates['sendup_time'] = Carbon::now();
             }
 
-            if ((int) $valid['status'] === 2) {
-                $updates['exit_date'] = Carbon::now();
-                $updates['validation_time'] = Carbon::now();
-                $updates['validation_by'] = $userId;
-            }
-
             DB::table('visits')->where('id', '=', $id)->update($updates);
 
             $this->auditVisit($id, 'ddm_visit_assigned', [
                 'emp_visited' => $visit->emp_visited,
                 'status' => $visit->status,
             ], $updates);
+
+            return redirect()->route('home');
+        }
+
+        if ($this->isBadgeSaisieAgent()) {
+            $valid = $request->validate([
+                'badge_n' => ['nullable', 'max:100'],
+            ]);
+
+            $oldVisit = db::table('visits')->where('id', '=', $id)->first();
+            db::table('visits')->where('id', '=', $id)
+                ->update([
+                    'badge_n' => $valid['badge_n'] ?? null,
+                ]);
+
+            $this->auditVisit($id, 'badge_updated', [
+                'badge_n' => $oldVisit->badge_n ?? null,
+            ], [
+                'badge_n' => $valid['badge_n'] ?? null,
+            ]);
 
             return redirect()->route('home');
         }
@@ -709,7 +1027,7 @@ class GuestController extends Controller
                     'sendup_time' => Carbon::now()
                 ]);
         }
-        return redirect()->route('i_visitors');
+        return redirect()->route('home');
     }
 
     public function workflow(Request $request, $id)
@@ -743,12 +1061,33 @@ class GuestController extends Controller
             abort(404);
         }
 
-        if ($profile == 4 && ((int) $visit->emp_visited !== (int) $userId || !in_array($nextStatus, [1, 3], true))) {
-            abort(403);
+        $isFiscalVisit = (int) $visit->service_emp_visited === $this->fiscalAssignmentGroupId();
+        $isFiscalHead = $profile === 4 && $isFiscalVisit && $this->isServiceHead($userId, $visit->service_emp_visited);
+
+        if ($profile === 10 || $isFiscalHead) {
+            if (!$isFiscalVisit || !in_array($nextStatus, [1, 2, 3], true)) {
+                abort(403);
+            }
+
+            if (!is_null($visit->emp_visited) && (int) $visit->emp_visited !== (int) $userId && !$this->isServiceAssignmentAgent()) {
+                abort(403);
+            }
+        } elseif ($profile === 4) {
+            $serviceMember = DB::table('user_groups')
+                ->where('a_user', '=', $userId)
+                ->where('a_group', '=', $visit->service_emp_visited)
+                ->exists();
+            if (!$serviceMember || !in_array($nextStatus, [1, 2, 3], true)) {
+                abort(403);
+            }
         }
 
         if ($profile === 9) {
-            if ((int) $visit->emp_visited !== (int) $userId || !in_array($nextStatus, [1, 2, 3], true)) {
+            if (!in_array($nextStatus, [1, 3], true)) {
+                abort(403);
+            }
+
+            if (!$this->isServiceAssignmentAgent() && (int) $visit->emp_visited !== (int) $userId) {
                 abort(403);
             }
 
@@ -759,12 +1098,6 @@ class GuestController extends Controller
             if ($nextStatus === 3 && empty($visit->sendup_time)) {
                 $updates['sendup_time'] = Carbon::now();
             }
-            if ($nextStatus === 2) {
-                $updates['exit_date'] = Carbon::now();
-                $updates['validation_time'] = Carbon::now();
-                $updates['validation_by'] = $userId;
-            }
-
             DB::table('visits')->where('id', '=', $id)->update($updates);
 
             return redirect()->back();
@@ -774,11 +1107,15 @@ class GuestController extends Controller
             abort(403);
         }
 
-        if (!in_array($profile, [4, 5], true)) {
+        if (!in_array($profile, [4, 5, 10], true)) {
             abort(403);
         }
 
         $updates = ['status' => $nextStatus];
+
+        if (in_array($profile, [4, 10], true) && $nextStatus === 1 && empty($visit->emp_visited) && !$this->isServiceAssignmentAgent()) {
+            $updates['emp_visited'] = $userId;
+        }
 
         if ($nextStatus === 1 && empty($visit->accept_time)) {
             $updates['accept_time'] = Carbon::now();
@@ -812,7 +1149,8 @@ class GuestController extends Controller
             $valid = $request->validate([
                 'fname' => ['required', 'bail'],
                 'lname' => ['required', 'bail'],
-                'category' => ['required', 'bail'],
+                'category' => ['nullable', 'bail'],
+                'workflow_type' => ['nullable', 'in:classic,bog'],
                 'org' => ['nullable'],
                 'role' => ['required'],
                 'other_value' => ['nullable'],
@@ -824,37 +1162,31 @@ class GuestController extends Controller
                 'hostname' => ['nullable'],
                 'files' => [File::types(['jpg', 'jpeg', 'png']), 'nullable'],
             ]);
-            if (!is_null($request->org)) {
-                $org = organisation::where('name', '=', $request->org)->get();
-                if ($org->isnotempty()) {
-                    $org_out = $org[0]->id;
-                }
-                if ($org->isempty()) {
-                    $org = organisation::create([
-                        'name' => $valid['org']
-                    ]);
-                    $org_out = $org->id;
-                }
-                if ($request->role == "other") {
-                    if (!is_null($request->other_value)) {
-                        $pos_exists = DB::table('positions')->select('id', 'name')->whereraw('name like "' . $request->other_value . '"')->first();
-                        if ($pos_exists) {
-                            $position = $pos_exists->id;
-                        } else {
-                            $new_pos = db::table('positions')->insertGetId([
-                                'name' => $request->other_value
-                            ]);
-                            $position = $new_pos;
-                        }
+            $org_out = null;
+            $position = null;
+            if ($request->role == "other") {
+                if (!is_null($request->other_value)) {
+                    $pos_exists = DB::table('positions')->select('id', 'name')->whereraw('name like "' . $request->other_value . '"')->first();
+                    if ($pos_exists) {
+                        $position = $pos_exists->id;
+                    } else {
+                        $new_pos = db::table('positions')->insertGetId([
+                            'name' => $request->other_value
+                        ]);
+                        $position = $new_pos;
                     }
-                } else {
-                    $position = $request->role;
                 }
             } else {
-                $org_out = null;
-                $position = null;
+                $position = $request->role;
             }
 
+            $defaultCategoryId = $valid['category'] ?? DB::table('categories')->where('name', '=', 'Visite')->value('id');
+            if (!$defaultCategoryId) {
+                $defaultCategoryId = DB::table('categories')->value('id');
+            }
+            if (!$defaultCategoryId) {
+                abort(500, 'No visit category available.');
+            }
 
             $visitorData = [
                 'firstname' => $valid['fname'],
@@ -871,7 +1203,7 @@ class GuestController extends Controller
             $visit = ant_visits::create([
                 'visitor' => $visitor_id->id,
                 'category' => $valid['category'],
-                'subject' => $valid['subject'],
+                'subject' => $valid['subject'] ?? null,
                 'organization' => $org_out,
                 'entry_date' => $valid['date_entry'],
                 'emp_visited' => $valid['hostname'],
@@ -901,11 +1233,11 @@ class GuestController extends Controller
                     ]);
                 }
             }
-            return redirect()->route('i_visitors');
+            return redirect()->route('home');
         } elseif ($request->exists) {
             $valid = $request->validate([
                 'user' => ['nullable'],
-                'category' => ['required', 'bail'],
+                'category' => ['nullable', 'bail'],
                 'subject' => ['nullable'],
                 'org' => ['nullable'],
                 'date_entry' => ['required', 'bail'],
@@ -938,16 +1270,16 @@ class GuestController extends Controller
             $ant_id = ant_user::where('ant_user', '=', Auth::guard('web')->user()->id)->get();
             ant_visits::create([
                 'visitor' => $valid['user'],
-                'category' => $valid['category'],
+                'category' => $valid['category'] ?? null,
                 'organization' => $org_out,
-                'subject' => $valid['subject'],
+                'subject' => $valid['subject'] ?? null,
                 'entry_date' => $valid['date_entry'],
                 'emp_visited' => $valid['hostname'],
                 'ant_location' => $ant_id[0]['ant_group'],
                 'status' => 0,
             ]);
 
-            return redirect()->route('i_visitors');
+            return redirect()->route('home');
         }
     }
 
@@ -967,15 +1299,17 @@ class GuestController extends Controller
             ->select($select)
             ->where('is_deleted', '=', 0);
 
+        $searchedByNin = false;
         if ($nin !== '' && Schema::hasColumn($table, 'nin')) {
             $query->where('nin', '=', $nin);
+            $searchedByNin = true;
         } elseif ($cin !== '') {
             $query->where('cin', '=', $cin);
         } else {
             return response()->json(['found' => false]);
         }
 
-        if ($idCat !== '' && ctype_digit($idCat)) {
+        if (!$searchedByNin && $idCat !== '' && ctype_digit($idCat)) {
             $query->where('id_type', '=', (int) $idCat);
         }
 
@@ -1061,7 +1395,7 @@ class GuestController extends Controller
             $valid = $request->validate([
                 'fname' => ['required', 'bail'],
                 'lname' => ['required', 'bail'],
-                'category' => ['required', 'bail'],
+                'category' => ['nullable', 'bail'],
                 'org' => ['nullable'],
                 'role' => ['required'],
                 'other_value' => ['nullable'],
@@ -1081,7 +1415,6 @@ class GuestController extends Controller
                 'cin.required' => 'Le numero de piece est obligatoire.',
                 'nin.required' => 'Le NIN est obligatoire.',
                 'badge_n.required' => 'Le numero de badge est obligatoire.',
-                'category.required' => 'Le type de visite est obligatoire.',
                 'date_entry.required' => "L'heure d'entree est obligatoire.",
             ]);
 
@@ -1105,44 +1438,77 @@ class GuestController extends Controller
                     ]);
                     $org_out = $org->id;
                 }
-                if ($request->role == "other") {
-                    if (!is_null($request->other_value)) {
-                        $pos_exists = DB::table('positions')->select('id', 'name')->whereraw('name like "' . $request->other_value . '"')->first();
-                        if ($pos_exists) {
-                            $position = $pos_exists->id;
-                        } else {
-                            $new_pos = db::table('positions')->insertGetId([
-                                'name' => $request->other_value
-                            ]);
-                            $position = $new_pos;
-                        }
-                    }
-                } else {
-                    $position = $request->role;
-                }
             } else {
                 $org_out = null;
-                $position = null;
+            }
+
+            $position = null;
+            if ($request->role == "other") {
+                if (!is_null($request->other_value)) {
+                    $pos_exists = DB::table('positions')->select('id', 'name')->whereraw('name like "' . $request->other_value . '"')->first();
+                    if ($pos_exists) {
+                        $position = $pos_exists->id;
+                    } else {
+                        $new_pos = db::table('positions')->insertGetId([
+                            'name' => $request->other_value
+                        ]);
+                        $position = $new_pos;
+                    }
+                }
+            } else {
+                $position = $request->role;
+            }
+
+            $defaultCategoryId = $valid['category'] ?? DB::table('categories')->where('name', '=', 'Visite')->value('id');
+            if (!$defaultCategoryId) {
+                $defaultCategoryId = DB::table('categories')->value('id');
+            }
+            if (!$defaultCategoryId) {
+                abort(500, 'No visit category available.');
+            }
+            $workflowType = strtolower(trim((string) $request->input('workflow_type', 'classic')));
+            if (!in_array($workflowType, ['classic', 'bog'], true)) {
+                $workflowType = 'classic';
             }
 
 
 
+            $visitorId = $this->resolveVisitorIdForExisting('visitors', $valid);
+            if (!$visitorId) {
+                $visitorData = [
+                    'firstname' => $valid['fname'],
+                    'lastname' => $valid['lname'],
+                    'position' => $position,
+                    'id_type' => $valid['id_cat'],
+                    'cin' => $valid['cin'],
+                ];
+                if (Schema::hasColumn('visitors', 'nin')) {
+                    $visitorData['nin'] = $valid['nin'];
+                }
+                $visitorId = visitor::create($visitorData)->id;
+            } else {
+                $visitorUpdate = [
+                    'firstname' => $valid['fname'],
+                    'lastname' => $valid['lname'],
+                    'id_type' => $valid['id_cat'],
+                    'cin' => $valid['cin'],
+                ];
+                if (Schema::hasColumn('visitors', 'nin')) {
+                    $visitorUpdate['nin'] = $valid['nin'] ?? null;
+                }
+                if (!is_null($position)) {
+                    $visitorUpdate['position'] = $position;
+                }
 
-            $visitorData = [
-                'firstname' => $valid['fname'],
-                'lastname' => $valid['lname'],
-                'position' => $position,
-                'id_type' => $valid['id_cat'],
-                'cin' => $valid['cin'],
-            ];
-            if (Schema::hasColumn('visitors', 'nin')) {
-                $visitorData['nin'] = $valid['nin'];
+                DB::table('visitors')
+                    ->where('id', '=', $visitorId)
+                    ->update($visitorUpdate);
             }
-            $visitor_id = visitor::create($visitorData);
             $visit = visit::create([
-                'visitor' => $visitor_id->id,
-                'category' => $valid['category'],
-                'subject' => $valid['subject'],
+                'visitor' => $visitorId,
+                'category' => $defaultCategoryId,
+                'workflow_type' => $workflowType,
+                'subject' => $valid['subject'] ?? null,
                 'organization' => $org_out,
                 'observations' => $request->observations,
                 'entry_date' => $valid['date_entry'],
@@ -1150,15 +1516,26 @@ class GuestController extends Controller
                 'service_emp_visited' => null,
                 'badge_n' => $valid['badge_n'],
                 'status' => 0,
+                'is_deleted' => 0,
+            ]);
+            \Log::info('Reception visit created', [
+                'branch' => 'new_or_reused',
+                'visit_id' => $visit->id,
+                'visitor_id' => $visitorId,
+                'entry_date' => $valid['date_entry'],
+                'status' => 0,
+                'is_deleted' => 0,
             ]);
             $this->auditVisit($visit->id, 'visit_created_by_reception', null, [
-                'visitor' => $visitor_id->id,
-                'category' => $valid['category'],
-                'subject' => $valid['subject'],
+                'visitor' => $visitorId,
+                'category' => $defaultCategoryId,
+                'workflow_type' => $workflowType,
+                'subject' => $valid['subject'] ?? null,
                 'organization' => $org_out,
                 'entry_date' => $valid['date_entry'],
                 'badge_n' => $valid['badge_n'],
                 'status' => 0,
+                'is_deleted' => 0,
             ]);
             if (!is_null($request->permets)) {
                 $data = explode(",", $request->permets);
@@ -1184,11 +1561,12 @@ class GuestController extends Controller
                 }
             }
 
-            return redirect()->route('i_visitors');
+            return redirect()->route('home', ['status' => '0']);
         } elseif ($request->exists) {
             $valid = $request->validate([
                 'user' => ['nullable'],
-                'category' => ['required', 'bail'],
+                'category' => ['nullable', 'bail'],
+                'workflow_type' => ['nullable', 'in:classic,bog'],
                 'subject' => ['nullable'],
                 'org' => ['nullable'],
                 'date_entry' => ['required', 'bail'],
@@ -1204,6 +1582,31 @@ class GuestController extends Controller
             $valid['user'] = $this->resolveVisitorIdForExisting('visitors', $valid);
             if (empty($valid['user'])) {
                 return back()->with('error', 'Visiteur existant introuvable. Relisez la carte ou selectionnez le visiteur.');
+            }
+
+            $visitorUpdate = [
+                'firstname' => $valid['fname'] ?? null,
+                'lastname' => $valid['lname'] ?? null,
+                'id_type' => $valid['id_cat'] ?? null,
+                'cin' => $valid['cin'] ?? null,
+            ];
+            if (Schema::hasColumn('visitors', 'nin')) {
+                $visitorUpdate['nin'] = $valid['nin'] ?? null;
+            }
+            DB::table('visitors')
+                ->where('id', '=', $valid['user'])
+                ->update($visitorUpdate);
+
+            $workflowType = strtolower(trim((string) $request->input('workflow_type', 'classic')));
+            if (!in_array($workflowType, ['classic', 'bog'], true)) {
+                $workflowType = 'classic';
+            }
+            $defaultCategoryId = $valid['category'] ?? DB::table('categories')->where('name', '=', 'Visite')->value('id');
+            if (!$defaultCategoryId) {
+                $defaultCategoryId = DB::table('categories')->value('id');
+            }
+            if (!$defaultCategoryId) {
+                abort(500, 'No visit category available.');
             }
             if (!is_null($request->org)) {
                 $org = organisation::where('name', '=', $request->org)->get();
@@ -1222,43 +1625,78 @@ class GuestController extends Controller
 
             $visit = visit::create([
                 'visitor' => $valid['user'],
-                'category' => $valid['category'],
+                'category' => $defaultCategoryId,
+                'workflow_type' => $workflowType,
                 'organization' => $org_out,
                 'observations' => $request->observations,
-                'subject' => $valid['subject'],
+                'subject' => $valid['subject'] ?? null,
                 'entry_date' => $valid['date_entry'],
-                'emp_visited' => $request->hostname ? $valid['hostname'] : null,
-                'service_emp_visited' => $request->service,
+                'emp_visited' => null,
+                'service_emp_visited' => null,
                 'badge_n' => $valid['badge_n'],
                 'status' => 0,
+                'is_deleted' => 0,
+            ]);
+            \Log::info('Reception visit created', [
+                'branch' => 'existing',
+                'visit_id' => $visit->id,
+                'visitor_id' => $valid['user'],
+                'entry_date' => $valid['date_entry'],
+                'status' => 0,
+                'is_deleted' => 0,
             ]);
             $this->auditVisit($visit->id, 'visit_created_existing_visitor', null, [
                 'visitor' => $valid['user'],
-                'category' => $valid['category'],
+                'category' => $defaultCategoryId,
+                'workflow_type' => $workflowType,
                 'organization' => $org_out,
-                'subject' => $valid['subject'],
+                'subject' => $valid['subject'] ?? null,
                 'entry_date' => $valid['date_entry'],
                 'badge_n' => $valid['badge_n'],
                 'status' => 0,
+                'is_deleted' => 0,
             ]);
 
-            return redirect()->route('i_visitors');
+            return redirect()->route('home', ['status' => '0']);
         }
     }
     public function delete(Request $request, $id)
     {
-        if (!in_array((int) Auth::guard('web')->user()->profile, [5, 6], true)) {
+        $profile = (int) Auth::guard('web')->user()->profile;
+        if (!in_array($profile, [1, 2, 3, 5, 6], true)) {
             abort(403);
         }
 
         $oldVisit = visit::where('id', $id)->first();
-        visit::where('id', $id)
-            ->update(['is_deleted' => 1]);
-        $this->auditVisit($id, 'visit_deleted', [
-            'is_deleted' => $oldVisit->is_deleted ?? null,
-        ], [
-            'is_deleted' => 1,
-        ]);
+        if ($oldVisit) {
+            visit::where('id', $id)
+                ->update([
+                    'is_deleted' => 1,
+                    'deleted_at' => Carbon::now(),
+                ]);
+            $this->auditVisit($id, 'visit_deleted', [
+                'is_deleted' => $oldVisit->is_deleted ?? null,
+            ], [
+                'is_deleted' => 1,
+            ]);
+            return redirect()->route('i_visitors');
+        }
+
+        $oldAntenneVisit = DB::table('antenne_visits')->where('id', $id)->first();
+        if ($oldAntenneVisit) {
+            DB::table('antenne_visits')->where('id', $id)->update([
+                'is_deleted' => 1,
+                'deleted_at' => Carbon::now(),
+            ]);
+            $this->auditVisit($id, 'antenne_visit_deleted', [
+                'is_deleted' => $oldAntenneVisit->is_deleted ?? null,
+            ], [
+                'is_deleted' => 1,
+            ]);
+            return redirect()->route('i_visitors_ant');
+        }
+
+        abort(404);
         return redirect()->route('i_visitors');
     }
 
@@ -1332,9 +1770,36 @@ class GuestController extends Controller
         );
     }
 
+    private function isFiscalAssignmentAgent(): bool
+    {
+        $user = Auth::guard('web')->user();
+
+        return $user && (
+            $user->name === 'agent_fiscal'
+            || $user->email === 'agent_fiscal@visilog.local'
+        );
+    }
+
+    private function isBadgeSaisieAgent(): bool
+    {
+        $user = Auth::guard('web')->user();
+
+        return $user && (
+            (int) $user->profile === 5
+            || $user->name === 'agent_saisie_badge'
+            || $user->email === 'agent_saisie_badge@visilog.local'
+        );
+    }
+
     private function serviceAssignmentGroupId(): int
     {
         return 19;
+    }
+
+    private function fiscalAssignmentGroupId(): int
+    {
+        return (int) (DB::table('groups')->where('group_name', 'like', '%Fiscal%')->value('id')
+            ?: DB::table('groups')->where('group_name', 'like', '%DFC%')->value('id'));
     }
 
     private function ant_service_edit_index(Request $request, $id)

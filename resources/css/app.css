@@ -440,24 +440,28 @@
     }
 
     .visitx-shell .sidebar-brand {
-        @apply mx-4 mb-5 mt-5 rounded-2xl border-0 p-4;
+        @apply mx-3 mb-4 mt-4 rounded-xl border-0 p-3;
         background: transparent;
         box-shadow: none;
     }
 
     .visitx-brand-mark {
-        @apply flex h-12 w-12 items-center justify-center rounded-2xl text-lg font-black text-white;
+        @apply flex h-10 w-10 items-center justify-center rounded-xl text-base font-black text-white;
         background: linear-gradient(135deg, var(--visitx-primary), #9E77ED);
-        box-shadow: 0 12px 30px rgba(127, 86, 217, 0.28);
+        box-shadow: 0 8px 18px rgba(127, 86, 217, 0.24);
     }
 
     .visitx-shell .sidebar-nav {
-        @apply px-4;
+        @apply gap-1 px-3;
     }
 
     .visitx-shell .sidebar-link {
-        @apply rounded-xl px-4 py-3 text-sm font-semibold;
+        @apply rounded-lg px-3 py-2.5 text-sm font-semibold;
         color: #A0A8C0;
+    }
+
+    .visitx-shell .sidebar-link svg {
+        @apply h-4 w-4 shrink-0;
     }
 
     .visitx-shell .sidebar-link:hover {
@@ -469,11 +473,11 @@
         background: rgba(127, 86, 217, 0.95);
         color: #FFFFFF;
         --tw-ring-color: transparent;
-        box-shadow: 0 14px 28px rgba(127, 86, 217, 0.28);
+        box-shadow: 0 8px 18px rgba(127, 86, 217, 0.22);
     }
 
     .visitx-shell .console-status {
-        @apply mx-4 mb-5 rounded-2xl border-0 p-4;
+        @apply mx-3 mb-4 rounded-xl border-0 p-3;
         background: rgba(255, 255, 255, 0.08);
     }
 
@@ -516,7 +520,7 @@
     }
 
     .visitx-shell .topbar {
-        @apply min-h-[78px] border-b-0 px-6 py-4 shadow-none sm:px-8;
+        @apply min-h-[64px] border-b-0 px-4 py-3 shadow-none sm:px-5;
         background: rgba(255, 255, 255, 0.85);
         backdrop-filter: blur(14px);
     }
@@ -526,12 +530,12 @@
     }
 
     .visitx-eyebrow {
-        @apply text-xs font-bold uppercase tracking-[0.24em];
+        @apply text-[11px] font-bold uppercase tracking-[0.18em];
         color: var(--visitx-primary);
     }
 
     .visitx-topbar-title {
-        @apply text-lg font-bold;
+        @apply text-lg font-extrabold sm:text-xl;
         color: var(--visitx-secondary);
     }
 
@@ -541,40 +545,59 @@
     }
 
     .visitx-search {
-        @apply items-center gap-2 rounded-xl border px-4 py-3 text-sm shadow-sm;
-        width: min(100%, 340px);
+        @apply items-center gap-2 rounded-xl border px-3 py-2 text-xs shadow-sm;
+        width: min(100%, 300px);
         border-color: var(--visitx-border);
         background: var(--visitx-panel);
         color: var(--visitx-muted);
     }
 
     .visitx-search input {
-        @apply w-full border-0 bg-transparent p-0 text-sm outline-none;
+        @apply w-full border-0 bg-transparent p-0 text-xs outline-none;
         color: var(--visitx-muted);
     }
 
     .visitx-avatar-button {
-        @apply flex h-11 w-11 items-center justify-center rounded-full border text-sm font-bold shadow-sm;
+        @apply flex h-10 w-10 items-center justify-center rounded-full border text-sm font-bold shadow-sm;
         border-color: rgba(127, 86, 217, 0.15);
         background: rgba(127, 86, 217, 0.12);
         color: var(--visitx-primary);
     }
 
+    .visitx-avatar-circle {
+        @apply flex h-10 w-10 items-center justify-center rounded-full border text-sm font-black shadow-sm transition;
+        border-color: rgba(127, 86, 217, 0.15);
+        background: linear-gradient(135deg, rgba(127, 86, 217, 0.14), rgba(127, 86, 217, 0.06));
+        color: var(--visitx-primary);
+    }
+
     .visitx-hero {
-        @apply flex flex-col gap-4 rounded-3xl p-6 sm:flex-row sm:items-center sm:justify-between;
+        @apply flex flex-col gap-4 rounded-2xl p-5 sm:flex-row sm:items-center sm:justify-between;
         background:
             linear-gradient(135deg, rgba(127, 86, 217, 0.10), rgba(255, 255, 255, 0.96) 38%),
             var(--visitx-panel);
         border: 1px solid var(--visitx-border);
-        box-shadow: 0 24px 50px rgba(16, 24, 40, 0.06);
+        box-shadow: 0 16px 34px rgba(16, 24, 40, 0.05);
     }
 
     .visitx-hero-side {
-        @apply flex flex-col items-start gap-3 sm:items-end;
+        @apply flex flex-wrap items-center gap-2 sm:justify-end;
+    }
+
+    .visitx-dashboard-hero > .visitx-hero-side {
+        margin-left: auto;
+    }
+
+    .visitx-dashboard-hero .page-title {
+        @apply text-2xl sm:text-3xl;
+    }
+
+    .visitx-dashboard-primary {
+        @apply gap-2 rounded-xl px-4 py-2.5 text-sm font-bold normal-case tracking-normal shadow-sm;
     }
 
     .visitx-hero-chip {
-        @apply inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold;
+        @apply inline-flex items-center gap-3 rounded-full px-5 py-3 text-sm font-semibold;
         background: rgba(50, 213, 131, 0.12);
         color: #027A48;
     }
@@ -585,13 +608,50 @@
     }
 
     .visitx-stat-card {
-        @apply flex-col items-start gap-4 rounded-3xl border-0;
-        background: var(--visitx-panel);
-        box-shadow: 0 20px 40px rgba(16, 24, 40, 0.06);
+        @apply flex items-center gap-3 overflow-hidden rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm transition duration-150;
+        min-height: 108px;
+    }
+
+    .visitx-stat-card:hover {
+        transform: translateY(-1px);
+        border-color: rgba(127, 86, 217, 0.24);
+        box-shadow: 0 14px 28px rgba(16, 24, 40, 0.07);
+    }
+
+    .visitx-stat-figure {
+        @apply flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl;
+    }
+
+    .visitx-stat-figure svg {
+        @apply h-6 w-6;
+    }
+
+    .visitx-stat-figure-purple {
+        background: linear-gradient(135deg, rgba(127, 86, 217, 0.18), rgba(127, 86, 217, 0.08));
+        color: var(--visitx-primary);
+    }
+
+    .visitx-stat-figure-amber {
+        background: linear-gradient(135deg, rgba(253, 176, 34, 0.22), rgba(253, 176, 34, 0.10));
+        color: #f79009;
+    }
+
+    .visitx-stat-figure-green {
+        background: linear-gradient(135deg, rgba(50, 213, 131, 0.18), rgba(50, 213, 131, 0.08));
+        color: #12B76A;
+    }
+
+    .visitx-stat-figure-slate {
+        background: linear-gradient(135deg, rgba(102, 112, 133, 0.18), rgba(102, 112, 133, 0.08));
+        color: #667085;
+    }
+
+    .visitx-stat-copy {
+        @apply flex min-w-0 flex-1 flex-col;
     }
 
     .visitx-stat-badge {
-        @apply rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wide;
+        @apply w-fit rounded-full px-0 py-0 text-xs font-bold uppercase tracking-wide;
         background: rgba(127, 86, 217, 0.12);
         color: var(--visitx-primary);
     }
@@ -611,6 +671,30 @@
         color: #475467;
     }
 
+    .visitx-stat-number {
+        @apply mt-1 text-3xl font-extrabold leading-none text-slate-900;
+    }
+
+    .visitx-stat-label {
+        @apply mt-1 text-sm text-slate-500;
+    }
+
+    .visitx-badge-pill {
+        @apply inline-flex min-w-20 justify-center rounded-xl px-4 py-2 text-base font-black tracking-wide shadow-sm;
+        line-height: 1;
+    }
+
+    .visitx-badge-pill-soft {
+        background: linear-gradient(135deg, rgba(127, 86, 217, 0.16), rgba(127, 86, 217, 0.08));
+        color: var(--visitx-secondary);
+        border: 1px solid rgba(127, 86, 217, 0.18);
+    }
+
+    .visitx-badge-col {
+        width: 8rem;
+        min-width: 8rem;
+    }
+
     .visitx-shell .panel,
     .visitx-shell .form-card {
         border: 1px solid var(--visitx-border);
@@ -625,9 +709,111 @@
         color: var(--visitx-muted);
     }
 
+    .visitx-shell .modern-table tbody td,
+    .visitx-shell table tbody td {
+        padding: 0.75rem 1rem;
+        font-size: 0.875rem;
+        line-height: 1.25rem;
+    }
+
     .visitx-shell .modern-table tbody tr:hover,
     .visitx-shell table tbody tr:hover {
         background: rgba(127, 86, 217, 0.04);
+    }
+
+    .visitx-status-pill {
+        @apply inline-flex min-w-24 justify-center rounded-full px-3 py-1.5 text-xs font-bold;
+    }
+
+    .visitx-status-pill-amber {
+        background: rgba(253, 176, 34, 0.18);
+        color: #B54708;
+    }
+
+    .visitx-status-pill-green {
+        background: rgba(50, 213, 131, 0.14);
+        color: #027A48;
+    }
+
+    .visitx-status-pill-slate {
+        background: rgba(102, 112, 133, 0.14);
+        color: #475467;
+    }
+
+    .visitx-status-pill-blue {
+        background: rgba(59, 130, 246, 0.12);
+        color: #1D4ED8;
+    }
+
+    .visitx-actions-col {
+        width: 18rem;
+        min-width: 18rem;
+    }
+
+    .visitx-action-stack {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, max-content));
+        justify-content: end;
+        gap: 0.5rem;
+    }
+
+    .visitx-action-stack form {
+        display: contents;
+    }
+
+    .visitx-table-action {
+        @apply inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 transition;
+        min-width: 5.5rem;
+        background: linear-gradient(180deg, #FFFFFF, #F8FAFC);
+    }
+
+    .visitx-table-action svg {
+        @apply h-3.5 w-3.5;
+    }
+
+    .visitx-table-action:hover {
+        border-color: rgba(127, 86, 217, 0.22);
+        background: rgba(127, 86, 217, 0.06);
+        color: var(--visitx-primary);
+    }
+
+    .visitx-table-action-exit {
+        border-color: rgba(220, 38, 38, 0.18);
+        background: linear-gradient(135deg, #fff5f5 0%, #ffe4e6 100%);
+        color: #b91c1c;
+        box-shadow: 0 8px 16px rgba(220, 38, 38, 0.10);
+        font-weight: 800;
+    }
+
+    .visitx-table-action-exit:hover {
+        border-color: rgba(220, 38, 38, 0.32);
+        background: linear-gradient(135deg, #fee2e2 0%, #fecdd3 100%);
+        color: #991b1b;
+    }
+
+    .visitx-table-action-edit {
+        border-color: rgba(59, 130, 246, 0.18);
+        background: linear-gradient(180deg, #FFFFFF, #EFF6FF);
+        color: #1D4ED8;
+    }
+
+    .visitx-table-action-edit:hover {
+        border-color: rgba(59, 130, 246, 0.30);
+        background: #DBEAFE;
+        color: #1E40AF;
+    }
+
+    .primary-action {
+        @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold uppercase tracking-wide text-white shadow-sm transition duration-150 focus:outline-none focus:ring-2 focus:ring-indigo-200;
+        background: linear-gradient(135deg, var(--anam-blue) 0%, var(--visitx-primary) 100%);
+    }
+
+    .primary-action svg {
+        @apply h-4 w-4;
+    }
+
+    .primary-action:hover {
+        background: linear-gradient(135deg, var(--anam-blue-dark) 0%, #6941C6 100%);
     }
 
     .visitx-form-hero {

@@ -17,7 +17,7 @@ class antreceptionpresident
      */
     public function handle(Request $request, Closure $next)
     {
-        if (auth::guard('web')->user()->profile == "6" || auth::guard('web')->user()->profile == "2" )
+        if (in_array((int) auth::guard('web')->user()->profile, [1, 2, 3, 6], true))
         {
             return $next($request);
         }else{

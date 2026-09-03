@@ -9,230 +9,278 @@ using System.Threading.Tasks;
 using ElyctisCardService.Models;
 using ElyctisCardService.Services;
 
-namespace ElyctisCardService.Controllers
+namespace ElyctisCardService.Controllers;
+
+public sealed class LocalHttpApi
 {
-    public sealed class LocalHttpApi
-    {
-        private readonly AppOptions _options;
-        private readonly ElyctisCardReader _reader;
-        private readonly FileLogger _logger;
-        private TcpListener _listener;
-        private CancellationTokenSource _cts;
-        private Task _loop;
+	private sealed class RequestInfo
+	{
+		public string Method { get; set; }
 
-        public LocalHttpApi(AppOptions options, ElyctisCardReader reader, FileLogger logger)
-        {
-            _options = options;
-            _reader = reader;
-            _logger = logger;
-        }
+		public string Path { get; set; }
 
-        public void Start()
-        {
-            var uri = new Uri(_options.ListenUrl);
-            var address = IPAddress.Parse(uri.Host);
-            _listener = new TcpListener(address, uri.Port);
-            _listener.Start();
-            _cts = new CancellationTokenSource();
-            _loop = Task.Run(() => ListenAsync(_cts.Token));
-        }
+		public NameValueCollection Query { get; set; }
 
-        public void Stop()
-        {
-            try
-            {
-                if (_cts != null)
-                    _cts.Cancel();
-                if (_listener != null)
-                    _listener.Stop();
-                if (_loop != null)
-                    _loop.Wait(TimeSpan.FromSeconds(3));
-            }
-            catch (Exception ex)
-            {
-                _logger.Error("HTTP API stop failed.", ex);
-            }
-        }
+		public NameValueCollection Headers { get; set; }
+	}
 
-        private async Task ListenAsync(CancellationToken token)
-        {
-            while (!token.IsCancellationRequested)
-            {
-                try
-                {
-                    var client = await _listener.AcceptTcpClientAsync().ConfigureAwait(false);
-                    var ignored = Task.Run(() => HandleClientAsync(client), token);
-                }
-                catch (ObjectDisposedException)
-                {
-                    return;
-                }
-                catch (SocketException)
-                {
-                    if (token.IsCancellationRequested)
-                        return;
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    _logger.Error("HTTP listener loop failed.", ex);
-                }
-            }
-        }
+	private readonly AppOptions _options;
 
-        private async Task HandleClientAsync(TcpClient client)
-        {
-            using (client)
-            {
-                var stream = client.GetStream();
-                var request = await ReadRequestAsync(stream).ConfigureAwait(false);
-                if (request == null)
-                    return;
+	private readonly ElyctisCardReader _reader;
 
-                if (request.Method == "OPTIONS")
-                {
-                    await WriteJson(stream, 204, new { }).ConfigureAwait(false);
-                    return;
-                }
+	private readonly FileLogger _logger;
 
-                if (!IsAuthorized(request.Headers, request.Query))
-                {
-                    await WriteJson(stream, 401, new { success = false, status = "unauthorized" }).ConfigureAwait(false);
-                    return;
-                }
+	private TcpListener _listener;
 
-                try
-                {
-                    if (request.Path == "/health")
-                    {
-                        await WriteJson(stream, 200, new { success = true, status = "ok" }).ConfigureAwait(false);
-                        return;
-                    }
+	private CancellationTokenSource _cts;
 
-                    if (request.Path == "/read-card")
-                    {
-                        var result = await _reader.ReadCardAsync(request.Query["mrz"]).ConfigureAwait(false);
-                        await WriteJson(stream, 200, result).ConfigureAwait(false);
-                        return;
-                    }
+	private Task _loop;
 
-                    await WriteJson(stream, 404, new { success = false, status = "not_found" }).ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    _logger.Error("HTTP request failed.", ex);
-                    WriteJson(stream, 500, CardReadResult.Error("HTTP_ERROR", ex.Message)).Wait();
-                }
-            }
-        }
+	public LocalHttpApi(AppOptions options, ElyctisCardReader reader, FileLogger logger)
+	{
+		_options = options;
+		_reader = reader;
+		_logger = logger;
+	}
 
-        private bool IsAuthorized(NameValueCollection headers, NameValueCollection query)
-        {
-            if (string.IsNullOrWhiteSpace(_options.ApiToken))
-                return true;
+	public void Start()
+	{
+		Uri uri = new Uri(_options.ListenUrl);
+		IPAddress localaddr = IPAddress.Parse(uri.Host);
+		_listener = new TcpListener(localaddr, uri.Port);
+		_listener.Start();
+		_cts = new CancellationTokenSource();
+		_loop = Task.Run(() => ListenAsync(_cts.Token));
+	}
 
-            var token = headers["X-Elyctis-Token"];
-            if (string.IsNullOrWhiteSpace(token))
-                token = query["token"];
+	public void Stop()
+	{
+		try
+		{
+			if (_cts != null)
+			{
+				_cts.Cancel();
+			}
+			if (_listener != null)
+			{
+				_listener.Stop();
+			}
+			if (_loop != null)
+			{
+				_loop.Wait(TimeSpan.FromSeconds(3.0));
+			}
+		}
+		catch (Exception exception)
+		{
+			_logger.Error("HTTP API stop failed.", exception);
+		}
+	}
 
-            return string.Equals(token, _options.ApiToken, StringComparison.Ordinal);
-        }
+	private async Task ListenAsync(CancellationToken token)
+	{
+		while (!token.IsCancellationRequested)
+		{
+			try
+			{
+				TcpClient client = await _listener.AcceptTcpClientAsync().ConfigureAwait(continueOnCapturedContext: false);
+				Task.Run(() => HandleClientAsync(client), token);
+			}
+			catch (ObjectDisposedException)
+			{
+				break;
+			}
+			catch (SocketException)
+			{
+				if (token.IsCancellationRequested)
+				{
+					break;
+				}
+				throw;
+			}
+			catch (Exception exception)
+			{
+				_logger.Error("HTTP listener loop failed.", exception);
+			}
+		}
+	}
 
-        private async Task<RequestInfo> ReadRequestAsync(NetworkStream stream)
-        {
-            var buffer = new byte[8192];
-            var read = await stream.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false);
-            if (read <= 0)
-                return null;
+	private async Task HandleClientAsync(TcpClient client)
+	{
+		using (client)
+		{
+			NetworkStream stream = client.GetStream();
+			RequestInfo request = await ReadRequestAsync(stream).ConfigureAwait(continueOnCapturedContext: false);
+			if (request == null)
+			{
+				return;
+			}
+			if (request.Method == "OPTIONS")
+			{
+				await WriteJson(stream, 204, new { }).ConfigureAwait(continueOnCapturedContext: false);
+				return;
+			}
+			if (IsAuthorized(request.Headers, request.Query))
+			{
+				try
+				{
+					if (request.Path == "/health")
+					{
+						await WriteJson(stream, 200, new
+						{
+							success = true,
+							ok = true,
+							status = "ok"
+						}).ConfigureAwait(continueOnCapturedContext: false);
+					}
+					else if (request.Path == "/diagnostics")
+					{
+						await WriteJson(stream, 200, new
+						{
+							success = true,
+							ok = true,
+							status = "ok",
+							listenUrl = _options.ListenUrl,
+							readerNameContains = _options.ReaderNameContains,
+							scannerPortName = _options.ScannerPortName,
+							scannerMrzTimeoutMs = _options.ScannerMrzTimeoutMs,
+							scannerAssemblyPath = _options.ScannerAssemblyPath,
+							readTimeoutMs = _options.ReadTimeoutMs,
+							readDG2Photo = _options.ReadDG2Photo
+						}).ConfigureAwait(continueOnCapturedContext: false);
+					}
+					else if (request.Path == "/read-card")
+					{
+						await WriteJson(stream, 200, await _reader.ReadCardAsync(request.Query["mrz"]).ConfigureAwait(continueOnCapturedContext: false)).ConfigureAwait(continueOnCapturedContext: false);
+					}
+					else
+					{
+						await WriteJson(stream, 404, new
+						{
+							success = false,
+							status = "not_found"
+						}).ConfigureAwait(continueOnCapturedContext: false);
+					}
+					return;
+				}
+				catch (Exception ex)
+				{
+					_logger.Error("HTTP request failed.", ex);
+					WriteJson(stream, 500, CardReadResult.Error("HTTP_ERROR", ex.Message)).Wait();
+					return;
+				}
+			}
+			await WriteJson(stream, 401, new
+			{
+				success = false,
+				status = "unauthorized"
+			}).ConfigureAwait(continueOnCapturedContext: false);
+		}
+	}
 
-            var raw = Encoding.ASCII.GetString(buffer, 0, read);
-            var reader = new StringReader(raw);
-            var firstLine = reader.ReadLine();
-            if (string.IsNullOrWhiteSpace(firstLine))
-                return null;
+	private bool IsAuthorized(NameValueCollection headers, NameValueCollection query)
+	{
+		if (string.IsNullOrWhiteSpace(_options.ApiToken))
+		{
+			return true;
+		}
+		string text = headers["X-Elyctis-Token"];
+		if (string.IsNullOrWhiteSpace(text))
+		{
+			text = query["token"];
+		}
+		return string.Equals(text, _options.ApiToken, StringComparison.Ordinal);
+	}
 
-            var first = firstLine.Split(' ');
-            if (first.Length < 2)
-                return null;
+	private async Task<RequestInfo> ReadRequestAsync(NetworkStream stream)
+	{
+		byte[] buffer = new byte[8192];
+		int read = await stream.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(continueOnCapturedContext: false);
+		if (read <= 0)
+		{
+			return null;
+		}
+		string raw = Encoding.ASCII.GetString(buffer, 0, read);
+		StringReader reader = new StringReader(raw);
+		string firstLine = reader.ReadLine();
+		if (string.IsNullOrWhiteSpace(firstLine))
+		{
+			return null;
+		}
+		string[] first = firstLine.Split(' ');
+		if (first.Length < 2)
+		{
+			return null;
+		}
+		NameValueCollection headers = new NameValueCollection(StringComparer.OrdinalIgnoreCase);
+		while (true)
+		{
+			string value;
+			string line = (value = reader.ReadLine());
+			if (string.IsNullOrEmpty(value))
+			{
+				break;
+			}
+			int num = line.IndexOf(':');
+			if (num > 0)
+			{
+				headers[line.Substring(0, num).Trim()] = line.Substring(num + 1).Trim();
+			}
+		}
+		Uri uri = new Uri("http://127.0.0.1" + first[1]);
+		return new RequestInfo
+		{
+			Method = first[0].ToUpperInvariant(),
+			Path = uri.AbsolutePath.TrimEnd('/').ToLowerInvariant(),
+			Query = ParseQuery(uri.Query),
+			Headers = headers
+		};
+	}
 
-            var headers = new NameValueCollection(StringComparer.OrdinalIgnoreCase);
-            string line;
-            while (!string.IsNullOrEmpty(line = reader.ReadLine()))
-            {
-                var colon = line.IndexOf(':');
-                if (colon > 0)
-                    headers[line.Substring(0, colon).Trim()] = line.Substring(colon + 1).Trim();
-            }
+	private NameValueCollection ParseQuery(string query)
+	{
+		NameValueCollection nameValueCollection = new NameValueCollection(StringComparer.OrdinalIgnoreCase);
+		if (string.IsNullOrWhiteSpace(query))
+		{
+			return nameValueCollection;
+		}
+		string[] array = query.TrimStart('?').Split('&');
+		foreach (string text in array)
+		{
+			if (!string.IsNullOrWhiteSpace(text))
+			{
+				string[] array2 = text.Split(new char[1] { '=' }, 2);
+				string name = Uri.UnescapeDataString(array2[0]);
+				string value = ((array2.Length > 1) ? Uri.UnescapeDataString(array2[1].Replace("+", " ")) : "");
+				nameValueCollection[name] = value;
+			}
+		}
+		return nameValueCollection;
+	}
 
-            var uri = new Uri("http://127.0.0.1" + first[1]);
-            return new RequestInfo
-            {
-                Method = first[0].ToUpperInvariant(),
-                Path = uri.AbsolutePath.TrimEnd('/').ToLowerInvariant(),
-                Query = ParseQuery(uri.Query),
-                Headers = headers
-            };
-        }
+	private async Task WriteJson(NetworkStream stream, int statusCode, object body)
+	{
+		string json = ((statusCode == 204) ? "" : Json.Serialize(body));
+		byte[] payload = Encoding.UTF8.GetBytes(json);
+		string reason = Reason(statusCode);
+		string headers = "HTTP/1.1 " + statusCode + " " + reason + "\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: " + payload.Length + "\r\nAccess-Control-Allow-Origin: " + _options.AllowedOrigin + "\r\nAccess-Control-Allow-Methods: GET, OPTIONS\r\nAccess-Control-Allow-Headers: X-Elyctis-Token, Content-Type\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n";
+		byte[] headerBytes = Encoding.ASCII.GetBytes(headers);
+		await stream.WriteAsync(headerBytes, 0, headerBytes.Length).ConfigureAwait(continueOnCapturedContext: false);
+		if (payload.Length > 0)
+		{
+			await stream.WriteAsync(payload, 0, payload.Length).ConfigureAwait(continueOnCapturedContext: false);
+		}
+	}
 
-        private NameValueCollection ParseQuery(string query)
-        {
-            var values = new NameValueCollection(StringComparer.OrdinalIgnoreCase);
-            if (string.IsNullOrWhiteSpace(query))
-                return values;
-
-            foreach (var part in query.TrimStart('?').Split('&'))
-            {
-                if (string.IsNullOrWhiteSpace(part))
-                    continue;
-                var pair = part.Split(new[] { '=' }, 2);
-                var key = Uri.UnescapeDataString(pair[0]);
-                var value = pair.Length > 1 ? Uri.UnescapeDataString(pair[1].Replace("+", " ")) : "";
-                values[key] = value;
-            }
-
-            return values;
-        }
-
-        private async Task WriteJson(NetworkStream stream, int statusCode, object body)
-        {
-            var json = statusCode == 204 ? "" : Json.Serialize(body);
-            var payload = Encoding.UTF8.GetBytes(json);
-            var reason = Reason(statusCode);
-            var headers =
-                "HTTP/1.1 " + statusCode + " " + reason + "\r\n" +
-                "Content-Type: application/json; charset=utf-8\r\n" +
-                "Content-Length: " + payload.Length + "\r\n" +
-                "Access-Control-Allow-Origin: " + _options.AllowedOrigin + "\r\n" +
-                "Access-Control-Allow-Methods: GET, OPTIONS\r\n" +
-                "Access-Control-Allow-Headers: X-Elyctis-Token, Content-Type\r\n" +
-                "Cache-Control: no-store\r\n" +
-                "Connection: close\r\n\r\n";
-
-            var headerBytes = Encoding.ASCII.GetBytes(headers);
-            await stream.WriteAsync(headerBytes, 0, headerBytes.Length).ConfigureAwait(false);
-            if (payload.Length > 0)
-                await stream.WriteAsync(payload, 0, payload.Length).ConfigureAwait(false);
-        }
-
-        private static string Reason(int statusCode)
-        {
-            switch (statusCode)
-            {
-                case 200: return "OK";
-                case 204: return "No Content";
-                case 401: return "Unauthorized";
-                case 404: return "Not Found";
-                case 409: return "Conflict";
-                default: return "Internal Server Error";
-            }
-        }
-
-        private sealed class RequestInfo
-        {
-            public string Method { get; set; }
-            public string Path { get; set; }
-            public NameValueCollection Query { get; set; }
-            public NameValueCollection Headers { get; set; }
-        }
-    }
+	private static string Reason(int statusCode)
+	{
+		return statusCode switch
+		{
+			200 => "OK", 
+			204 => "No Content", 
+			401 => "Unauthorized", 
+			404 => "Not Found", 
+			409 => "Conflict", 
+			_ => "Internal Server Error", 
+		};
+	}
 }

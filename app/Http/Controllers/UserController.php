@@ -19,8 +19,53 @@ class UserController extends Controller
      */
     public function index(Request $request)
     {
-        $users = User::query()
-            ->search($request->search)
+        $query = User::query()->search($request->search);
+
+        if (Schema::hasColumn('user_groups', 'is_head') && Schema::hasColumn('antenne_users', 'is_head')) {
+            $query->when($request->head_status === 'yes', function ($query) {
+                $query->where(function ($query) {
+                    $query->whereExists(function ($subQuery) {
+                        $subQuery->select(DB::raw(1))
+                            ->from('user_groups')
+                            ->whereColumn('user_groups.a_user', 'users.id')
+                            ->where('user_groups.is_head', 1);
+                    })->orWhereExists(function ($subQuery) {
+                        $subQuery->select(DB::raw(1))
+                            ->from('antenne_users')
+                            ->whereColumn('antenne_users.ant_user', 'users.id')
+                            ->where('antenne_users.is_head', 1);
+                    });
+                });
+            })->when($request->head_status === 'no', function ($query) {
+                $query->whereNotExists(function ($subQuery) {
+                    $subQuery->select(DB::raw(1))
+                        ->from('user_groups')
+                        ->whereColumn('user_groups.a_user', 'users.id')
+                        ->where('user_groups.is_head', 1);
+                })->whereNotExists(function ($subQuery) {
+                    $subQuery->select(DB::raw(1))
+                        ->from('antenne_users')
+                        ->whereColumn('antenne_users.ant_user', 'users.id')
+                        ->where('antenne_users.is_head', 1);
+                });
+            })->when($request->head_type === 'service', function ($query) {
+                $query->whereExists(function ($subQuery) {
+                    $subQuery->select(DB::raw(1))
+                        ->from('user_groups')
+                        ->whereColumn('user_groups.a_user', 'users.id')
+                        ->where('user_groups.is_head', 1);
+                });
+            })->when($request->head_type === 'antenne', function ($query) {
+                $query->whereExists(function ($subQuery) {
+                    $subQuery->select(DB::raw(1))
+                        ->from('antenne_users')
+                        ->whereColumn('antenne_users.ant_user', 'users.id')
+                        ->where('antenne_users.is_head', 1);
+                });
+            });
+        }
+
+        $users = $query
             ->paginate(10)
             ->withQueryString();
         $userIds = $users->getCollection()->pluck('id');
@@ -44,12 +89,18 @@ class UserController extends Controller
             $user->antenne_labels = ($antenneRows[$user->id] ?? collect())->map(function ($row) {
                 return $row->antenne_name . ((int) ($row->is_head ?? 0) === 1 ? ' (Chef)' : '');
             })->implode(', ');
+            $user->head_labels = collect([
+                ($serviceRows[$user->id] ?? collect())->filter(fn ($row) => (int) ($row->is_head ?? 0) === 1)->map(fn ($row) => 'Service: ' . $row->group_name),
+                ($antenneRows[$user->id] ?? collect())->filter(fn ($row) => (int) ($row->is_head ?? 0) === 1)->map(fn ($row) => 'Antenne: ' . $row->antenne_name),
+            ])->flatten()->implode(', ');
 
             return $user;
         });
         $url = 'users';
+        $groups = DB::table('groups')->orderBy('group_name')->get(['id', 'group_name']);
+        $antennes = DB::table('antennes')->orderBy('antenne_name')->get(['id', 'antenne_name']);
 
-        return view('users.index', compact('users', 'url'));
+        return view('users.index', compact('users', 'url', 'groups', 'antennes'));
     }
 
     /**
@@ -80,7 +131,7 @@ class UserController extends Controller
     public function store(UserRequest $request)
     {
         $data = $request->validated();
-        $data['name'] = $data['username'];
+        $data['name'] = trim(($data['firstname'] ?? '') . ' ' . ($data['lastname'] ?? ''));
         $services = collect($data['services'] ?? [])->map(fn ($id) => (int) $id)->unique();
         $headServices = collect($data['head_services'] ?? [])->map(fn ($id) => (int) $id)->intersect($services)->unique();
         $antennes = collect($data['antennes'] ?? [])->map(fn ($id) => (int) $id)->unique();
@@ -129,7 +180,7 @@ class UserController extends Controller
     public function update(UserRequest $request, User $user)
     {
         $data = $request->validated();
-        $data['name'] = $data['username'];
+        $data['name'] = trim(($data['firstname'] ?? '') . ' ' . ($data['lastname'] ?? ''));
         $services = collect($data['services'] ?? [])->map(fn ($id) => (int) $id)->unique();
         $headServices = collect($data['head_services'] ?? [])->map(fn ($id) => (int) $id)->intersect($services)->unique();
         $antennes = collect($data['antennes'] ?? [])->map(fn ($id) => (int) $id)->unique();

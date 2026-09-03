@@ -23,8 +23,10 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::get('/',[HomeController::class,'get_index'])->middleware('auth:web')->name('home');
+Route::get('/reception/live-dashboard',[HomeController::class,'reception_live_dashboard'])->middleware('auth:web')->name('reception_live_dashboard');
 
 Route::get('/guests',[GuestController::class, 'get_index'])->middleware(['auth:web','receptionistspresident'])->name('i_visitors');
+Route::get('/trash',[GuestController::class, 'trash'])->middleware(['auth:web','president'])->name('i_trash');
 Route::get('/guests/add',[GuestController::class, 'add_index'])->middleware(['auth:web','reception'])->name('i_add_visitors');
 Route::get('/guests/find-card-visitor',[GuestController::class, 'find_card_visitor'])->middleware(['auth:web'])->name('find_card_visitor');
 Route::post('/guests/add',[GuestController::class, 'store'])->middleware(['auth:web','rantr'])->name('p_add_visitors');
@@ -39,6 +41,7 @@ Route::get('/guests/edit/{id}',[GuestController::class, 'edit_index'])->middlewa
 Route::post('/guests/edit/{id}',[GuestController::class, 'edit'])->middleware(['auth:web','rantr'])->name('p_edit_visitors');
 Route::post('/guests/workflow/{id}',[GuestController::class, 'workflow'])->middleware(['auth:web'])->name('p_workflow_visitors');
 Route::post('/guests/delete/{id}',[GuestController::class, 'delete'])->middleware(['auth:web','rantr'])->name('p_delete_visitors');
+Route::post('/trash/restore/{type}/{id}',[GuestController::class, 'restore'])->middleware(['auth:web','president'])->name('p_restore_visit');
 
 Route::get('/info/{id}',[InfoController::class, 'info_index'])->middleware(['auth:web','rp'])->name('i_info');
 Route::get('/info_ant/{id}',[InfoController::class, 'ant_info_index'])->middleware(['auth:web','ant_users'])->name('i_ant_info');

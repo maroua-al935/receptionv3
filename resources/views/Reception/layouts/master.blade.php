@@ -16,7 +16,7 @@
     @livewireStyles
     </head>
     <body class="visitx-theme">
-        <div x-data="{ sidebarOpen: false }" class="app-shell visitx-shell flex flex-row items-stretch">
+        <div x-data="{ sidebarOpen: false }" class="app-shell visitx-shell">
             @include('Reception.layouts.sidebar')
 
             <div class="relative flex flex-1 flex-col overflow-hidden">

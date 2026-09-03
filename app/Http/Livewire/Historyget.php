@@ -28,7 +28,7 @@ class Historyget extends Component
 
     public function mount()
     {
-        $this->query = "";
+        $this->query = request('search', "");
         $this->results = collect();
         $this->cat = "1";
         $this->status = "";
@@ -38,6 +38,10 @@ class Historyget extends Component
         $this->searchhidden = 0;
 
         $this->loadStats();
+
+        if (!empty($this->query)) {
+            $this->searchGlobal($this->query);
+        }
     }
 
     private function loadStats()
@@ -92,6 +96,32 @@ class Historyget extends Component
         } elseif ($this->cat == "5") {
             $this->searchbybadge($this->query);
         }
+    }
+
+    public function searchGlobal($query)
+    {
+        if (empty($query) || strlen($query) < 2) {
+            $this->results = collect();
+            return;
+        }
+
+        $this->results = $this->applyVisibility(visits::selectRaw("visits.id,visits.is_deleted,visits.badge_n,organisations.name as org_name,visitors.firstname,visitors.lastname,status,entry_date,users.name as emp_visited,groups.group_name as service_name,visits.subject as subject")
+            ->leftjoin('visitors', 'visitors.id', '=', 'visits.visitor')
+            ->leftjoin('organisations', 'organisations.id', '=', 'visits.organization')
+            ->leftjoin('groups', 'groups.id', '=', 'visits.service_emp_visited')
+            ->leftjoin('users', 'users.id', '=', 'visits.emp_visited')
+            ->where(function ($builder) use ($query) {
+                $builder->whereRaw("concat(visitors.firstname,' ',visitors.lastname) like ?", ['%' . $query . '%'])
+                    ->orWhereRaw("organisations.name like ?", ['%' . $query . '%'])
+                    ->orWhereRaw("visits.badge_n like ?", ['%' . $query . '%'])
+                    ->orWhereRaw("users.name like ?", ['%' . $query . '%'])
+                    ->orWhereRaw("groups.group_name like ?", ['%' . $query . '%'])
+                    ->orWhereRaw("visits.subject like ?", ['%' . $query . '%']);
+            }))
+            ->when($this->status !== '', function ($builder) {
+                $builder->where('status', $this->status);
+            })
+            ->get();
     }
 
     public function searchbyname($query)
@@ -259,7 +289,7 @@ class Historyget extends Component
     {
         $user = Auth::guard('web')->user();
 
-        if ($user && (int) $user->profile === 4) {
+        if ($user && in_array((int) $user->profile, [4, 10], true)) {
             $headServiceIds = ug::where('a_user', '=', $user->id)
                 ->where('is_head', '=', 1)
                 ->pluck('a_group');
@@ -277,6 +307,10 @@ class Historyget extends Component
             $query->where('visits.service_emp_visited', '=', $this->serviceAssignmentGroupId());
         }
 
+        if ($this->isFiscalAssignmentAgent()) {
+            $query->where('visits.service_emp_visited', '=', $this->fiscalAssignmentGroupId());
+        }
+
         return $query;
     }
 
@@ -290,9 +324,25 @@ class Historyget extends Component
         );
     }
 
+    private function isFiscalAssignmentAgent(): bool
+    {
+        $user = Auth::guard('web')->user();
+
+        return $user && (
+            $user->name === 'agent_fiscal'
+            || $user->email === 'agent_fiscal@visilog.local'
+        );
+    }
+
     private function serviceAssignmentGroupId(): int
     {
         return 19;
+    }
+
+    private function fiscalAssignmentGroupId(): int
+    {
+        return (int) (\DB::table('groups')->where('group_name', 'like', '%Fiscal%')->value('id')
+            ?: \DB::table('groups')->where('group_name', 'like', '%DFC%')->value('id'));
     }
 
     private function exportRows(): Collection
@@ -354,4 +404,3 @@ class Historyget extends Component
         };
     }
 }
-
